@@ -629,10 +629,105 @@ A core value prop of `@payai/agent-payments`: merchants are instantly discoverab
 - Spec defines OpenAPI with `x-payment-info` extensions at `/openapi.json`
 - `llms.txt` format is token-efficient for LLM context windows
 
-### What the middleware does automatically
+### Discovery metadata: three tiers (strict priority)
+
+The middleware needs input/output schemas, examples, and descriptions to populate x402 Bazaar and MPP discovery. Three sources, checked in order:
+
+**Tier 1: CLI-generated `.payai/discovery.json`** (default when `discovery.auto: true`)
+- The CLI scanner (`npx @payai/agent-payments scan`) analyzes the merchant's source code
+- Detects framework, parses route files (AST), extracts TypeScript types, Zod schemas, JSDoc
+- Generates `.payai/discovery.json` with input schemas, output schemas, and examples per endpoint
+- Merchant reviews and commits the file
+- When `discovery.auto: true` (the default): if `.payai/discovery.json` doesn't exist, the SDK runs the scanner as a background child process on first startup. The generated file is picked up on next server restart.
+
+**Tier 2: Merchant-provided OpenAPI spec** (`discovery.openapi: "./openapi.json"`)
+- Merchant explicitly points to an existing OpenAPI spec file
+- SDK parses it, matches operations to `endpoints` by method+path
+- Extracts `parameters`, `requestBody`, `responses` schemas
+- Used when merchant already maintains an OpenAPI spec and trusts its accuracy
+
+**Tier 3: Minimal from `endpoints` config** (always available)
+- Uses `description` and `price` from `EndpointConfig`
+- No input/output schemas — just enough for basic catalog listing
+- This is the fallback when neither Tier 1 nor Tier 2 is available
+
+**Startup flow:**
+
+```
+Server starts
+    ↓
+Check for .payai/discovery.json
+    ↓
+Found? → Load it → rich discovery. Done.
+    ↓
+Not found → Is discovery.auto === true? (default: yes)
+    ↓                          ↓
+   Yes                         No
+    ↓                          ↓
+Run CLI scanner               Check for discovery.openapi path
+async in background                ↓
+    ↓                         Found? → Parse OpenAPI → rich discovery. Done.
+Log: "Scanning endpoints..."       ↓
+    ↓                         Not found → Use minimal discovery (Tier 3)
+Generates                    Log: "No discovery metadata found.
+.payai/discovery.json        Using description + price only.
+    ↓                        Run: npx @payai/agent-payments scan"
+Log: "Discovery metadata
+generated. Restart to apply."
+    ↓
+This startup: Tier 3 (minimal)
+Next startup: Tier 1 (rich)
+```
+
+**Config:**
+
+```typescript
+app.use(agentPayments({
+  apiKey: "payai_xxx",
+  endpoints: { ... },
+  discovery: {
+    auto: true,                    // Default: true. Run CLI scanner if .payai/discovery.json missing.
+    openapi: "./openapi.json",     // Optional: path to existing OpenAPI spec (Tier 2)
+  },
+}));
+```
+
+**`.payai/discovery.json` format:**
+
+```json
+{
+  "GET /weather": {
+    "input": { "city": "San Francisco" },
+    "inputSchema": {
+      "type": "object",
+      "properties": { "city": { "type": "string" } },
+      "required": ["city"]
+    },
+    "output": {
+      "example": { "city": "San Francisco", "weather": "foggy", "temperature": 60 }
+    }
+  },
+  "POST /translate": {
+    "input": { "text": "Hello", "targetLang": "es" },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "targetLang": { "type": "string" }
+      },
+      "required": ["text", "targetLang"]
+    },
+    "output": {
+      "example": { "translated": "Hola", "confidence": 0.98 }
+    }
+  }
+}
+```
+
+### What the middleware does with discovery metadata
 
 **x402 Bazaar (built into 402 responses):**
-1. Auto-generate `declareDiscoveryExtension()` from `EndpointConfig` — map `description`, `price`, route pattern to bazaar `info` and `schema`
+1. Map discovery metadata to `declareDiscoveryExtension()` format (input schemas, output examples, JSON Schema)
 2. Inject bazaar extension into every 402 response on protected endpoints
 3. When payments settle through PayAI's facilitator, the facilitator catalogs the service
 4. PayAI's facilitator exposes `/discovery/resources` — all PayAI merchants are discoverable there
@@ -644,41 +739,37 @@ A core value prop of `@payai/agent-payments`: merchants are instantly discoverab
 4. Content negotiation: JSON for programmatic clients, Markdown for LLMs and terminals
 
 **PayAI API registration (managed mode):**
-1. On startup: SDK registers merchant's endpoints with PayAI API
+1. On startup: SDK registers merchant's endpoints with PayAI API (including discovery metadata)
 2. PayAI submits to discovery directories: MPP registry (`mpp.dev/services`), PayAI's own catalog, and any future directories
 3. Dashboard shows merchants which catalogs they're listed in ("You're live in X directories")
-
-### Optional endpoint config for richer discovery
-
-```typescript
-endpoints: {
-  "GET /weather": {
-    price: "$0.01",
-    description: "Current weather data for any city",
-    // Optional: richer discovery metadata
-    discovery: {
-      input: { city: "San Francisco" },
-      inputSchema: {
-        properties: { city: { type: "string" } },
-        required: ["city"],
-      },
-      output: {
-        example: { city: "San Francisco", weather: "foggy", temperature: 60 },
-      },
-    },
-  },
-}
-```
-
-When `discovery` is provided, the bazaar extension includes input/output schemas and examples — making the endpoint fully self-describing for AI agents. When omitted, the middleware generates minimal discovery metadata from `description` and `price`.
 
 ### New source files
 
 ```
 src/discovery/
-├── bazaar.ts              # x402 bazaar extension generation from EndpointConfig
+├── bazaar.ts              # x402 bazaar extension generation from discovery metadata
 ├── mpp-discovery.ts       # MPP /discover, /llms.txt, /openapi.json generation
-└── types.ts               # DiscoveryConfig type (input, inputSchema, output)
+├── loader.ts              # Tier 1/2/3 resolution: load .payai/discovery.json or OpenAPI
+├── scanner.ts             # Async CLI scanner launcher (child_process)
+└── types.ts               # DiscoveryMetadata type per endpoint
+```
+
+### CLI scanner (shipped as bin entry)
+
+```bash
+npx @payai/agent-payments scan
+
+# Detected framework: Express
+# Scanning route files...
+# Found 4 endpoints matching your config:
+#
+#   GET /weather     → input: { city: string }, output: { city, weather, temperature }
+#   POST /translate  → input: { text: string, targetLang: string }, output: { translated, confidence }
+#   GET /premium     → input: { query: string }, output: { results: array }
+#   POST /analyze    → input: { data: object }, output: { analysis: object }
+#
+# Written to .payai/discovery.json
+# Restart your server to apply.
 ```
 
 ### New dependency
