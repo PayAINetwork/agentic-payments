@@ -606,6 +606,89 @@ ESM-only. Build with `tsup`.
 8. **Dynamic payTo test**: Verify payTo function is called and address is routed correctly per-protocol
 9. **Manual mode test**: Use `AgentPayments` class directly without middleware
 
+---
+
+## Automatic Discovery
+
+A core value prop of `@payai/agent-payments`: merchants are instantly discoverable in every agentic wallet and client directory the moment they add the middleware. No separate registration step.
+
+### How discovery works in each protocol
+
+**x402 Bazaar** — extension-based, facilitator-cataloged:
+- Merchant declares `extensions: { bazaar: { info, schema } }` in route config
+- The bazaar extension embeds in every 402 response (input/output schemas, examples, pricing)
+- When payments flow through a facilitator, the facilitator extracts bazaar data and catalogs the service
+- Clients query facilitator `/discovery/resources` to find services
+- Supports HTTP endpoints and MCP tools
+- Key package: `@x402/extensions` — `declareDiscoveryExtension()`, `extractDiscoveryInfo()`, `withBazaar()`
+
+**MPP Discovery** — central registry + per-service endpoints:
+- Central registry at `mpp.dev/api/services` (JSON) and `mpp.dev/services` (web UI)
+- Services registered in `schemas/services.ts` in the MPP repo (currently manual)
+- Proxy publishes `/discover`, `/discover/{id}`, `/llms.txt` with content negotiation (JSON for apps, Markdown for LLMs/terminals)
+- Spec defines OpenAPI with `x-payment-info` extensions at `/openapi.json`
+- `llms.txt` format is token-efficient for LLM context windows
+
+### What the middleware does automatically
+
+**x402 Bazaar (built into 402 responses):**
+1. Auto-generate `declareDiscoveryExtension()` from `EndpointConfig` — map `description`, `price`, route pattern to bazaar `info` and `schema`
+2. Inject bazaar extension into every 402 response on protected endpoints
+3. When payments settle through PayAI's facilitator, the facilitator catalogs the service
+4. PayAI's facilitator exposes `/discovery/resources` — all PayAI merchants are discoverable there
+
+**MPP Discovery (expose endpoints on merchant's server):**
+1. Auto-generate and serve `/discover` endpoint listing all protected endpoints with payment info
+2. Auto-generate and serve `/llms.txt` in LLM-friendly format
+3. Auto-generate and serve `/openapi.json` with `x-payment-info` and `x-service-info` extensions per the MPP spec
+4. Content negotiation: JSON for programmatic clients, Markdown for LLMs and terminals
+
+**PayAI API registration (managed mode):**
+1. On startup: SDK registers merchant's endpoints with PayAI API
+2. PayAI submits to discovery directories: MPP registry (`mpp.dev/services`), PayAI's own catalog, and any future directories
+3. Dashboard shows merchants which catalogs they're listed in ("You're live in X directories")
+
+### Optional endpoint config for richer discovery
+
+```typescript
+endpoints: {
+  "GET /weather": {
+    price: "$0.01",
+    description: "Current weather data for any city",
+    // Optional: richer discovery metadata
+    discovery: {
+      input: { city: "San Francisco" },
+      inputSchema: {
+        properties: { city: { type: "string" } },
+        required: ["city"],
+      },
+      output: {
+        example: { city: "San Francisco", weather: "foggy", temperature: 60 },
+      },
+    },
+  },
+}
+```
+
+When `discovery` is provided, the bazaar extension includes input/output schemas and examples — making the endpoint fully self-describing for AI agents. When omitted, the middleware generates minimal discovery metadata from `description` and `price`.
+
+### New source files
+
+```
+src/discovery/
+├── bazaar.ts              # x402 bazaar extension generation from EndpointConfig
+├── mpp-discovery.ts       # MPP /discover, /llms.txt, /openapi.json generation
+└── types.ts               # DiscoveryConfig type (input, inputSchema, output)
+```
+
+### New dependency
+
+```json
+{ "@x402/extensions": "^2.7.0" }
+```
+
+---
+
 ## Future Work (Fast Follow)
 
 - **CLI init tool**: `npx @payai/agent-payments init` — detects framework, scans routes, generates starter config. Shipped as `bin` entry in package.json.
