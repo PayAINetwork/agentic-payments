@@ -743,6 +743,79 @@ app.use(agentPayments({
 2. PayAI submits to discovery directories: MPP registry (`mpp.dev/services`), PayAI's own catalog, and any future directories
 3. Dashboard shows merchants which catalogs they're listed in ("You're live in X directories")
 
+---
+
+## Lifecycle Hooks
+
+Four hooks covering the payment lifecycle. All ship in v0.
+
+### Config
+
+```typescript
+app.use(agentPayments({
+  apiKey: "payai_xxx",
+  endpoints: { ... },
+  hooks: {
+    // Before payment check — can grant free access
+    onRequest: async (ctx) => {
+      if (ctx.request.headers["x-internal-key"] === SECRET) {
+        return { grant: true };
+      }
+    },
+    // After verification succeeds, before handler runs
+    onPaymentVerified: async (ctx) => {
+      await db.recordPayment(ctx.payment);
+    },
+    // After settlement completes
+    onPaymentSettled: async (ctx) => {
+      metrics.increment("revenue", ctx.payment.amount);
+    },
+    // Verification or settlement failure
+    onPaymentFailed: async (ctx) => {
+      alerting.notify("Payment failed", ctx.error);
+    },
+  },
+}));
+```
+
+### Hook reference
+
+| Hook | When | Can modify flow? | v0? |
+|------|------|-----------------|-----|
+| `onRequest` | Before payment header check | Yes — `{ grant: true }` skips payment | Yes |
+| `onPaymentVerified` | After verification, before handler | Yes — `{ reject: true, reason }` to deny | Yes |
+| `onPaymentSettled` | After settlement completes | No — informational | Yes |
+| `onPaymentFailed` | Verification or settlement fails | No — 402 already returning | Yes |
+
+### Hook context type
+
+```typescript
+interface HookContext {
+  request: RequestContext;
+  endpoint: EndpointConfig;
+  payment: {
+    protocol: Protocol;       // "x402" | "mpp"
+    payer?: string;
+    network?: string;
+    asset?: string;
+    amount?: string;
+    transaction?: string;     // tx hash (after settlement)
+  };
+  error?: {                   // only in onPaymentFailed
+    message: string;
+    code?: string;
+  };
+}
+```
+
+### New source file
+
+```
+src/hooks.ts                   # Hook types, runner, context builder
+```
+
+---
+
 ### New source files
 
 ```
