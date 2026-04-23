@@ -82,19 +82,24 @@ Per-request `accepts` entries include `extra: { name, version }` carrying the EI
 
 **MPP adapter** (`protocols/mpp.ts`) wraps `mppx/server`. Tempo payments settle on-chain **before** the client sends the credential, so `verifyAndSettle` performs the full verification path (HMAC check, expiry, on-chain transaction check via mppx's `compose()(req)`) and the returned `settleAndReceipt` simply attaches the `Payment-Receipt` header — no additional network call needed.
 
-The adapter parses `chainId` explicitly from the CAIP-2 network identifier (`eip155:42431` → `42431`) and passes it to mppx per-request; without this, mppx's internal client resolution would fall back to Tempo mainnet even in testnet mode.
+The adapter parses `chainId` explicitly from the CAIP-2 network identifier (`eip155:42431` → `42431`) and passes it to mppx per-request; without this, mppx's internal client resolution would fall back to Tempo mainnet even when `live: false`.
 
 ### Configuration resolution (`src/config.ts`)
 
 `resolveConfig(config)` normalizes a user-facing `AgentPaymentsConfig` into a `ResolvedConfig` that adapters consume. Responsibilities:
 
 - Mode detection (managed via `apiKey` vs. manual via `payTo`).
-- Network inference — single-string EVM/SVM addresses expand to every supported network in their family for the current `testnet` flag.
+- **Env flag** — `config.live` (boolean, defaults to `false`) is the public API. Internally `resolveConfig` flips polarity to a `testnet` local variable that the rest of the code uses; the flip happens once at the config boundary. Defaulting to testnet keeps local dev safe — no real payments without explicit `live: true`.
+- Network inference — `payTo` values expand across every supported network in their family:
+  - Bare EVM string (`"0x..."`) or `{ evm }` shorthand → all EVM chains.
+  - Bare Solana string or `{ solana }` shorthand → all Solana networks.
+  - `{ evm, solana }` shorthand → both families.
+  - CAIP-2 record (e.g. `{ "eip155:8453": "0x..." }`) → verbatim, no expansion.
 - Protocol inference — enables MPP only when a Tempo network is present.
 - Asset registry merging — built-in `USDC`/`USDT`/`pathUSD` plus any user-provided `CustomAssetDef` entries.
 - x402 `supportedNetworks` default — every PayAI-facilitator-supported chain for the environment.
 - MPP HMAC secret resolution — config → `MPP_SECRET_KEY` env var → persisted `.payai/mpp-secret` → auto-generate (with `.payai/.gitignore` written first).
-- Ascii validation on endpoint descriptions when MPP is active (the MPP spec doesn't pin on-wire encoding for non-ASCII header params).
+- ASCII validation on endpoint descriptions when MPP is active (the MPP spec doesn't pin on-wire encoding for non-ASCII header params).
 
 ### Express middleware + response buffering (`src/middleware/express.ts`)
 
@@ -130,6 +135,20 @@ A `CustomAssetDef` has one `name` (the developer-facing symbol, e.g. `"USDC"`) a
 
 This shape lets a single built-in `USDC` entry cover every PayAI-supported chain, including deployments that diverge in EIP-712 domain name (`"USD Coin"` on Base mainnet, `"Bridged USDC (SKALE Bridge)"` on Skale) or decimals (`pieUSD` on KiteAI testnet uses 18 decimals). Developers never look up a stablecoin address per-chain; they write `assets: ["USDC"]` and the SDK resolves the right deployment automatically.
 
+## PayTo shapes
+
+`payTo` accepts four developer-facing shapes, all normalized to a CAIP-2 record internally by `expandPayTo(value, testnet)`:
+
+| Shape | Example | Expansion |
+|-------|---------|-----------|
+| Bare EVM string | `"0x742d..."` | Spread across every EVM chain for the env (includes Tempo for MPP) |
+| Bare Solana string | `"7xKXtg..."` | Spread across every Solana network for the env |
+| `{ evm, solana }` shorthand | `{ evm: "0x...", solana: "7xKXtg..." }` | Each address spread across its own family's networks |
+| CAIP-2 record | `{ "eip155:8453": "0x..." }` | Verbatim — no expansion. Use when the shorthand can't express your case (different wallet per chain, selective network restriction, etc.) |
+| Function `(ctx) => PayToValue` | — | Resolved per-request; the result is then expanded using any of the shapes above |
+
+The shorthand is detected by `isPayToShorthand()` — an object whose keys are all `"evm"` or `"solana"`. Anything else is treated as a CAIP-2 record.
+
 ## Security properties
 
 - **MPP HMAC secret** is 32 bytes from `crypto.randomBytes`, persisted with mode `0o600`. The `.payai/` directory gets an auto-written `.gitignore` (contents: `*`) before the secret file is created, so the key can't be accidentally committed even if the user's repo-level gitignore doesn't cover `.payai/`.
@@ -144,7 +163,7 @@ This shape lets a single built-in `USDC` entry cover every PayAI-supported chain
 
 ## Testing
 
-- **Unit tests** — 97 tests across `utils.test.ts`, `config.test.ts`, `protocols/x402.test.ts`, `protocols/mpp.test.ts`. Run with `npm test` in `typescript/`. Vitest, ~350ms.
+- **Unit tests** — 100 tests across `utils.test.ts`, `config.test.ts`, `protocols/x402.test.ts`, `protocols/mpp.test.ts`. Run with `npm test` in `typescript/`. Vitest, ~350ms.
 - **Smoke tests** — `examples/typescript/npm run smoke` spawns each example via its own `npm start`, probes the 402 response, decodes the x402 `accepts` and MPP `request` payloads, and asserts canonical amounts + chainId + presence of both protocol headers. CI-ready.
 
 Relevant test files for specific invariants:

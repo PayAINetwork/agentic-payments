@@ -28,11 +28,16 @@ const app = express();
 
 app.use(
   agentPayments({
-    testnet: true,
-    payTo: "0xYourWalletAddress",
+    // Accept payments on every supported EVM chain and every Solana network
+    // with a single wallet per family. Replace with your own addresses.
+    payTo: {
+      evm: "0xYourEvmWallet",
+      solana: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+    },
     endpoints: {
       "GET /weather": { price: "$0.01", description: "Current weather" },
     },
+    // Default is testnet / no real funds. Set `live: true` to accept real payments.
   }),
 );
 
@@ -70,9 +75,9 @@ The script walks through the 402 in four steps, decoding the base64 `PAYMENT-REQ
 
 | # | Demonstrates |
 |---|---|
-| [01 · basic-express](examples/typescript/01-basic-express) | Minimum viable config: one EVM address, one endpoint, both protocols auto-enabled |
+| [01 · basic-express](examples/typescript/01-basic-express) | Minimum viable config using the `{ evm, solana }` `payTo` shorthand — one wallet per family, every supported chain enabled |
 | [02 · multi-asset](examples/typescript/02-multi-asset) | Uniform pricing across tokens + per-asset price records |
-| [03 · cross-chain](examples/typescript/03-cross-chain) | Explicit CAIP-2 `payTo` spanning Base + Tempo + Solana |
+| [03 · cross-chain](examples/typescript/03-cross-chain) | Explicit CAIP-2 `payTo` when you need per-chain control the shorthand can't express |
 | [04 · dynamic-pricing](examples/typescript/04-dynamic-pricing) | `price(ctx)` and `payTo(ctx)` functions (tiering, marketplace per-seller recipients) |
 | [05 · hooks](examples/typescript/05-hooks) | All four lifecycle hooks: `onRequest`, `onPaymentVerified`, `onPaymentSettled`, `onPaymentFailed` |
 | [99 · validation-errors](examples/typescript/99-validation-errors) | Shows how a config-time `ConfigError` surfaces (non-ASCII description with MPP enabled) |
@@ -81,6 +86,8 @@ The script walks through the 402 in four steps, decoding the base64 `PAYMENT-REQ
 
 - **Dual protocol in one middleware** — no separate code paths for x402 vs. MPP; the SDK picks the right adapter based on the client's request headers.
 - **Sixteen EVM chains + Solana by default** — writing `assets: ["USDC"]` automatically covers Base, Avalanche, Polygon, Sei, IoTeX, Peaq, XLayer, Skale, KiteAI (and their testnets) with correct per-chain USDC contract, decimals, and EIP-712 domain. Users never look up a stablecoin address.
+- **Per-family `payTo` shorthand** — write `payTo: { evm, solana }` and the SDK spreads each address across every supported network in its family, using mainnet or testnet chains based on the `live` flag.
+- **Safe-by-default `live` flag** — defaults to `false` (testnet, no real funds). Real payments require explicit `live: true` opt-in, matching Stripe's `livemode` convention.
 - **Dynamic price and payTo** — both can be functions of the request, so marketplaces, tiered APIs, and multi-tenant deployments work out of the box.
 - **Lifecycle hooks** — `onRequest` can grant free access (internal keys, auth tokens), `onPaymentVerified` can reject after verification, `onPaymentSettled`/`onPaymentFailed` give you observability.
 - **Response buffering for x402** — the middleware buffers `writeHead`/`write`/`end`/`flushHeaders` while the handler runs, so settlement happens only after a successful response (≥400s skip settlement). Same pattern as the reference `@x402/core/express` middleware.
@@ -93,7 +100,7 @@ From the repo root:
 ```bash
 cd typescript
 npm install
-npm test          # 97 unit tests (utils, config, x402, mpp adapters)
+npm test          # 100 unit tests (utils, config, x402, mpp adapters)
 npm run typecheck
 npm run build     # tsup → dist/
 ```
