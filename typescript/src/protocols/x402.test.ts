@@ -1,4 +1,7 @@
-import { decodePaymentRequiredHeader } from "@x402/core/http";
+import {
+  decodePaymentRequiredHeader,
+  encodePaymentSignatureHeader,
+} from "@x402/core/http";
 import { describe, expect, it } from "vitest";
 import type { CustomAssetDef, ResolvedX402Config } from "../types.js";
 import type { ChallengeContext } from "./types.js";
@@ -266,5 +269,109 @@ describe("x402 adapter — generateChallenge", () => {
       url: "/foo?x=1",
       description: "Described endpoint",
     });
+  });
+});
+
+describe("x402 adapter — verifyAndSettle requirements validation", () => {
+  /**
+   * Build a PAYMENT-SIGNATURE header containing arbitrary `accepted`
+   * requirements. Used to exercise the server-side validation of what
+   * the client claims its payment is for.
+   */
+  function signatureHeaderWithAccepted(accepted: Record<string, unknown>) {
+    // Minimal signed-permit-ish payload. The facilitator would normally
+    // verify this against `accepted`, but our validation rejects the
+    // request before we ever call the facilitator when accepted doesn't
+    // match our own advertised requirements, so the payload contents
+    // don't matter for the tests below.
+    const payload = {
+      x402Version: 2,
+      accepted,
+      payload: { signature: "0xdeadbeef", authorization: {} },
+    } as unknown as Parameters<typeof encodePaymentSignatureHeader>[0];
+    return encodePaymentSignatureHeader(payload);
+  }
+
+  const ctx = buildContext({
+    resolvedPrices: [{ asset: USDC, amount: "$0.01" }],
+    networks: ["eip155:84532"],
+    payTo: { "eip155:84532": RECIPIENT },
+  });
+
+  it("rejects a PAYMENT-SIGNATURE whose `accepted.payTo` doesn't match any server entry", async () => {
+    // REGRESSION GUARD (payment bypass). An attacker could craft a
+    // PAYMENT-SIGNATURE with `accepted.payTo = <attacker address>` and
+    // self-sign a dust payment to their own wallet. If we forwarded
+    // paymentPayload.accepted directly to facilitator.verify/settle,
+    // the facilitator would accept it (signature matches requirements)
+    // and the server would serve the paid content. The adapter MUST
+    // rebuild its own accepts array and only accept a client echo that
+    // matches one of our entries byte-for-byte.
+    const adapter = createX402Adapter(CONFIG);
+    const header = signatureHeaderWithAccepted({
+      scheme: "exact",
+      network: "eip155:84532",
+      asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      amount: "10000",
+      payTo: "0xBAD0000000000000000000000000000000000000", // ← attacker-chosen
+      maxTimeoutSeconds: 300,
+      extra: { name: "USDC", version: "2" },
+    });
+    const result = await adapter.verifyAndSettle(header, ctx);
+    expect(result.status).toBe(402);
+  });
+
+  it("rejects when the network is not one we advertised", async () => {
+    const adapter = createX402Adapter(CONFIG);
+    const header = signatureHeaderWithAccepted({
+      scheme: "exact",
+      network: "eip155:137", // mainnet Polygon — not in the testnet ctx
+      asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      amount: "10000",
+      payTo: RECIPIENT,
+      maxTimeoutSeconds: 300,
+      extra: { name: "USDC", version: "2" },
+    });
+    const result = await adapter.verifyAndSettle(header, ctx);
+    expect(result.status).toBe(402);
+  });
+
+  it("rejects when the amount is smaller than what the server quoted", async () => {
+    const adapter = createX402Adapter(CONFIG);
+    const header = signatureHeaderWithAccepted({
+      scheme: "exact",
+      network: "eip155:84532",
+      asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      amount: "1", // ← dust, vs. server's "10000"
+      payTo: RECIPIENT,
+      maxTimeoutSeconds: 300,
+      extra: { name: "USDC", version: "2" },
+    });
+    const result = await adapter.verifyAndSettle(header, ctx);
+    expect(result.status).toBe(402);
+  });
+
+  it("rejects when the extra.name (EIP-712 domain) is spoofed", async () => {
+    // If the client signs against the wrong EIP-712 domain, the resulting
+    // signature is valid for *that* domain — but not for the one the
+    // server is actually expecting. Let the validation catch it.
+    const adapter = createX402Adapter(CONFIG);
+    const header = signatureHeaderWithAccepted({
+      scheme: "exact",
+      network: "eip155:84532",
+      asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      amount: "10000",
+      payTo: RECIPIENT,
+      maxTimeoutSeconds: 300,
+      extra: { name: "Not USDC", version: "2" },
+    });
+    const result = await adapter.verifyAndSettle(header, ctx);
+    expect(result.status).toBe(402);
+  });
+
+  it("rejects a malformed PAYMENT-SIGNATURE header outright", async () => {
+    const adapter = createX402Adapter(CONFIG);
+    const result = await adapter.verifyAndSettle("not-a-real-header", ctx);
+    expect(result.status).toBe(402);
   });
 });
