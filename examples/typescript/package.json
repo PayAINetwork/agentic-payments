@@ -1,0 +1,27 @@
+{
+  "name": "agent-payments-examples",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runnable examples for @payai/mercantil-agent-sdk. Each example directory is a standalone workspace — copy it out and it runs.",
+  "workspaces": [
+    "01-basic-express",
+    "02-multi-asset",
+    "03-cross-chain",
+    "04-dynamic-pricing",
+    "05-hooks",
+    "99-validation-errors",
+    "shared"
+  ],
+  "scripts": {
+    "smoke": "tsx shared/scripts/smoke.ts",
+    "probe": "tsx shared/clients/challenge-probe.ts",
+    "pay:x402": "tsx shared/clients/x402-pay.ts",
+    "pay:mpp": "tsx shared/clients/mpp-pay.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

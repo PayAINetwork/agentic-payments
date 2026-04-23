@@ -1,5 +1,5 @@
 /**
- * @payai/agent-payments — Core type definitions
+ * @payai/mercantil-agent-sdk — Core type definitions
  *
  * See PLAN.md at repo root for full design rationale.
  */
@@ -21,12 +21,69 @@ export interface RequestContext {
 /** Built-in registry covers: "USDC", "USDT". PayAI API extends in managed mode. */
 export type AssetName = string;
 
-/** Custom asset definition for non-standard tokens */
-export interface CustomAssetDef {
-  name: string;
+/**
+ * Per-network deployment info for a token.
+ *
+ * Every entry carries its own address + decimals so the SDK can produce the
+ * correct atomic amount on each chain, even when the same asset name (e.g.
+ * `"USDC"`) wraps deployments that don't share decimals or EIP-712 metadata.
+ */
+export interface AssetNetworkInfo {
+  /** Token contract address on this network. */
+  address: string;
+  /** Token decimals for this deployment. */
   decimals: number;
-  /** Contract address per network (CAIP-2 → address) */
-  addresses: Record<string, string>;
+  /**
+   * EIP-712 domain name used for payment signing. Defaults to the asset's
+   * `name`. Override when the on-chain domain separator uses a different
+   * string — common for bridged/wrapped variants (e.g. `"USD Coin"` vs
+   * `"USDC"`, or `"Bridged USDC (SKALE Bridge)"`).
+   */
+  eip712Name?: string;
+  /** EIP-712 domain version. Defaults to `"2"`. */
+  eip712Version?: string;
+}
+
+/**
+ * Custom asset definition for a fungible token.
+ *
+ * Most users don't need to construct this directly — built-in assets like
+ * `"USDC"` already cover every PayAI-supported network. Use this when adding
+ * your own token (project token, stablecoin not in the built-in registry,
+ * etc.) via the `assets` config field.
+ *
+ * @example
+ * // A project token deployed on Base + Tempo:
+ * {
+ *   name: "PAYAI",
+ *   addresses: {
+ *     "eip155:8453": { address: "0x...", decimals: 18 },
+ *     "eip155:4217": { address: "0x...", decimals: 18 },
+ *   },
+ * }
+ *
+ * @example
+ * // Token whose on-chain EIP-712 domain name differs from its symbol:
+ * {
+ *   name: "USDT",
+ *   addresses: {
+ *     "eip155:1": {
+ *       address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+ *       decimals: 6,
+ *       eip712Name: "Tether USD",   // domain separator uses this, not "USDT"
+ *     },
+ *   },
+ * }
+ */
+export interface CustomAssetDef {
+  /**
+   * Friendly name / symbol used in `price` records and the `assets` list
+   * (e.g. `"USDC"`, `"USDT"`, `"PAYAI"`). Also acts as the default EIP-712
+   * domain name when a network entry doesn't set its own `eip712Name`.
+   */
+  name: string;
+  /** Contract address + decimals + optional EIP-712 metadata per network, keyed by CAIP-2 id. */
+  addresses: Record<string, AssetNetworkInfo>;
 }
 
 /**
@@ -46,22 +103,41 @@ export type Asset = AssetName | CustomAssetDef;
  * - function: dynamic pricing returning either format
  */
 export type PriceValue = string | Record<string, string>;
-export type Price =
-  | PriceValue
-  | ((ctx: RequestContext) => PriceValue | Promise<PriceValue>);
+export type Price = PriceValue | ((ctx: RequestContext) => PriceValue | Promise<PriceValue>);
 
 // --- PayTo ---
 
 /**
- * Payment recipient address.
- * - string: same address for all networks
- * - Record: per-network map { "eip155:8453": "0x...", "solana:mainnet": "..." }
- * - function: resolved per-request (for multi-tenant, marketplace, revenue share)
+ * Per-family wallet shorthand. Use this to accept payments on every
+ * supported network in each family with a single address per family:
+ *   - `evm` receives on every EVM chain the SDK supports (Base, Polygon, …,
+ *     plus Tempo for MPP).
+ *   - `solana` receives on every Solana network.
+ * The SDK picks testnet vs mainnet networks based on the top-level `live` flag.
+ *
+ * @example
+ * payTo: {
+ *   evm: "0xYourEvmWallet",
+ *   solana: "YourSolanaAddress",
+ * }
  */
-export type PayToValue = string | Record<string, string>;
-export type PayTo =
-  | PayToValue
-  | ((ctx: RequestContext) => PayToValue | Promise<PayToValue>);
+export interface PayToShorthand {
+  evm?: string;
+  solana?: string;
+}
+
+/**
+ * Payment recipient address.
+ * - `string`: auto-detected as EVM (0x prefix) or Solana, expanded across
+ *   that family's networks for the current testnet/mainnet env.
+ * - `{ evm, solana }`: per-family wallet. Each address covers every
+ *   supported network in its family. See {@link PayToShorthand}.
+ * - `Record<string, string>`: per-network CAIP-2 map for explicit control,
+ *   e.g. `{ "eip155:8453": "0x...", "solana:5eykt...": "..." }`.
+ * - function: resolved per-request (marketplace, revenue share, multi-tenant).
+ */
+export type PayToValue = string | PayToShorthand | Record<string, string>;
+export type PayTo = PayToValue | ((ctx: RequestContext) => PayToValue | Promise<PayToValue>);
 
 // --- Endpoint configuration ---
 
@@ -97,11 +173,12 @@ export interface AgentPaymentsConfig {
   apiKey?: string;
 
   /**
-   * Testnet mode. Flips all defaults to testnet equivalents:
-   * networks, asset addresses, facilitator, MPP chain.
-   * Default: false (production).
+   * Accept real payments. When `true`, all defaults target mainnet:
+   * networks, asset contracts, x402 facilitator, MPP Tempo chain.
+   * When `false` (the default), everything runs on testnets — safe for
+   * local development, no real funds at stake.
    */
-  testnet?: boolean;
+  live?: boolean;
 
   /** Endpoints to protect. Code is source of truth. */
   endpoints: EndpointMap;
@@ -127,6 +204,7 @@ export interface AgentPaymentsConfig {
   /** x402-specific config. */
   x402?: {
     facilitatorUrl?: string;
+    networks?: string[];
     scheme?: string;
   };
 
@@ -136,6 +214,9 @@ export interface AgentPaymentsConfig {
     realm?: string;
     methods?: unknown[];
   };
+
+  /** Lifecycle hooks for the payment flow. */
+  hooks?: Hooks;
 }
 
 // --- Internal resolved config ---
@@ -146,6 +227,8 @@ export interface ResolvedConfig {
   networks: string[];
   protocols: Protocol[];
   assetRegistry: AssetRegistry;
+  /** Asset names accepted by default when an endpoint doesn't override. */
+  defaultAssets: string[];
   x402: ResolvedX402Config | null;
   mpp: ResolvedMppConfig | null;
 }
@@ -153,6 +236,10 @@ export interface ResolvedConfig {
 export interface ResolvedX402Config {
   facilitatorUrl: string;
   scheme: string;
+  /** Networks the x402 adapter can actually settle on. Used to filter
+   *  ctx.networks so we don't emit challenges for chains the facilitator
+   *  can't handle (e.g. Tempo, which is MPP-only). */
+  supportedNetworks: string[];
 }
 
 export interface ResolvedMppConfig {
@@ -165,10 +252,7 @@ export type AssetRegistry = Record<string, CustomAssetDef>;
 
 // --- Request processing results ---
 
-export type ProcessResult =
-  | ProcessResultPassthrough
-  | ProcessResult402
-  | ProcessResult200;
+export type ProcessResult = ProcessResultPassthrough | ProcessResult402 | ProcessResult200;
 
 export interface ProcessResultPassthrough {
   status: "passthrough";
@@ -195,4 +279,34 @@ export interface PaymentMetadata {
   network?: string;
   asset?: string;
   amount?: string;
+}
+
+// --- Lifecycle hooks ---
+
+export interface HookContext {
+  request: RequestContext;
+  endpoint: EndpointConfig;
+  /** Populated from onPaymentVerified onward. Empty during onRequest. */
+  payment: Partial<PaymentMetadata>;
+  /** Present only for onPaymentFailed. */
+  error?: {
+    message: string;
+    code?: string;
+  };
+}
+
+export type OnRequestResult = undefined | { grant: true };
+export type OnPaymentVerifiedResult = undefined | { reject: true; reason?: string };
+
+export interface Hooks {
+  /** Before payment check — return { grant: true } to skip payment. */
+  onRequest?: (ctx: HookContext) => OnRequestResult | Promise<OnRequestResult>;
+  /** After verification succeeds, before handler runs. Return { reject: true } to deny. */
+  onPaymentVerified?: (
+    ctx: HookContext,
+  ) => OnPaymentVerifiedResult | Promise<OnPaymentVerifiedResult>;
+  /** After settlement completes. Informational only. */
+  onPaymentSettled?: (ctx: HookContext) => void | Promise<void>;
+  /** Verification or settlement failure. Informational only. */
+  onPaymentFailed?: (ctx: HookContext) => void | Promise<void>;
 }
