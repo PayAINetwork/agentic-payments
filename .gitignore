@@ -7,3 +7,11 @@ dist/
 .turbo/
 coverage/
 .DS_Store
+.claude/
+
+# SDK-managed secret store (MPP HMAC key, future credentials). Never commit —
+# anyone with this key can forge MPP challenges against the running server.
+.payai/
+
+# Internal planning doc — kept local, not published or referenced publicly.
+PLAN.md
