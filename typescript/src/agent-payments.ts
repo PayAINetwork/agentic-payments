@@ -19,21 +19,67 @@ import type {
 } from "./types.js";
 import { expandPayTo, matchEndpoint, resolveAssets, resolvePrice } from "./utils.js";
 
+/**
+ * Framework-agnostic payment core. Takes a {@link RequestContext}, runs it
+ * through route matching → hooks → protocol detection → verification →
+ * settlement wiring, and returns a {@link ProcessResult} the caller (an
+ * Express middleware or any other HTTP integration) turns into a response.
+ *
+ * Typical flow per request:
+ *
+ * 1. Match the request's `method + path` against configured endpoints.
+ *    No match → `{ status: "passthrough" }`, caller proceeds normally.
+ * 2. Fire `onRequest` hook. If it returns `{ grant: true }`, also passthrough.
+ * 3. Resolve dynamic `price`, `assets`, `payTo`, `networks`, `protocols`
+ *    (endpoint values override root config; see {@link EndpointConfig}).
+ * 4. Detect which protocol the client is paying with (x402 or MPP).
+ *    No payment header → `{ status: 402, headers }` with challenges from
+ *    every active adapter.
+ * 5. Call the matching adapter's `verifyAndSettle`. Failure fires
+ *    `onPaymentFailed` and returns 402.
+ * 6. Fire `onPaymentVerified`. A `{ reject: true }` return short-circuits to 402.
+ * 7. Wrap the returned `settleAndReceipt` so `onPaymentSettled` /
+ *    `onPaymentFailed` fire after the caller invokes it. Return
+ *    `{ status: 200, protocol, payment, settleAndReceipt }`.
+ *
+ * @example
+ * // Direct usage (no framework) — handy for Lambda / edge runtimes.
+ * const ap = new AgentPayments({ payTo: "0x...", endpoints: { ... } });
+ * const result = await ap.processRequest(requestContext);
+ * if (result.status === 402) return new Response(null, { status: 402, headers: result.headers });
+ * // …serve your handler, then:
+ * return result.settleAndReceipt(myResponse);
+ */
 export class AgentPayments {
   private readonly config: AgentPaymentsConfig;
   private resolved: ResolvedConfig | null = null;
   private readonly adapters = new Map<Protocol, ProtocolAdapter>();
   private initPromise: Promise<void> | null = null;
 
+  /**
+   * @param config - User-facing configuration. Validated + normalized lazily
+   *   on the first `processRequest` call so construction itself never throws,
+   *   never touches the filesystem, and never blocks on network work (e.g.
+   *   the managed-mode API client, once implemented).
+   */
   constructor(config: AgentPaymentsConfig) {
     this.config = config;
   }
 
+  /**
+   * Idempotent init — all concurrent first requests share the same
+   * initialization promise, so we never race on `resolveConfig` or
+   * double-create protocol adapters.
+   */
   private ensureInitialized(): Promise<void> {
     if (!this.initPromise) this.initPromise = this.initialize();
     return this.initPromise;
   }
 
+  /**
+   * One-shot initialization: normalize user config into {@link ResolvedConfig}
+   * and instantiate protocol adapters for every enabled protocol.
+   */
   private async initialize(): Promise<void> {
     const resolved = await resolveConfig(this.config);
     this.resolved = resolved;
@@ -41,6 +87,22 @@ export class AgentPayments {
     if (resolved.mpp) this.adapters.set("mpp", createMppAdapter(resolved.mpp));
   }
 
+  /**
+   * Process a single inbound request. See the class-level JSDoc for the
+   * full 7-step flow. The return value tells the caller what to do next:
+   *
+   * - `{ status: "passthrough" }` — not a protected route (or a hook granted
+   *   free access). Run the handler normally without attaching receipts.
+   * - `{ status: 402, headers }` — client must pay. Emit headers verbatim
+   *   (some values are arrays for multiple header instances — the caller's
+   *   header-setter must handle both).
+   * - `{ status: 200, protocol, payment, settleAndReceipt }` — payment
+   *   verified. Run your handler, then call `settleAndReceipt(response)`
+   *   to finalize settlement (x402) or attach a receipt (MPP).
+   *
+   * @param request - Normalized request context. Your framework middleware is
+   *   responsible for building this from the native request object.
+   */
   async processRequest(request: RequestContext): Promise<ProcessResult> {
     await this.ensureInitialized();
     const resolved = this.resolved as ResolvedConfig;
@@ -144,6 +206,11 @@ export class AgentPayments {
   }
 }
 
+/**
+ * Build a {@link HookContext} for passing to user-provided hooks.
+ * Keeps the `error` field off the object entirely when not present so
+ * the in-hook `if (ctx.error)` check reads cleanly.
+ */
 function buildHookContext(
   request: RequestContext,
   endpoint: EndpointConfig,
@@ -158,6 +225,12 @@ function buildHookContext(
   };
 }
 
+/**
+ * Run a lifecycle hook if configured. Errors thrown inside a hook are
+ * swallowed — hooks are advisory observability/policy bolts and MUST NOT
+ * be able to break the payment flow. If a hook throws, the payment
+ * continues as if the hook wasn't there.
+ */
 async function runHook<T>(
   hook: ((ctx: HookContext) => T | Promise<T>) | undefined,
   buildCtx: () => HookContext,
@@ -170,6 +243,16 @@ async function runHook<T>(
   }
 }
 
+/**
+ * Cross the price-shape gap: both a string price and a per-asset price
+ * record get flattened to `{ asset, amount }[]` for adapters.
+ *
+ * - String price → same amount for every resolved asset.
+ * - Record price → pick each asset's amount by `asset.name`. Throws if
+ *   the record is missing an entry for a resolved asset, since that means
+ *   the caller's `assets` and `price` keys disagree (a config bug, not a
+ *   request-time failure we want to paper over with silent defaults).
+ */
 function buildResolvedPrices(
   resolvedPrice: PriceValue,
   assets: CustomAssetDef[],

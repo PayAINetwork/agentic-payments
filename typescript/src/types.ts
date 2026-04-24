@@ -141,10 +141,68 @@ export type PayTo = PayToValue | ((ctx: RequestContext) => PayToValue | Promise<
 
 // --- Endpoint configuration ---
 
+/**
+ * Per-endpoint configuration. Every endpoint MUST set `price`; everything else
+ * is optional and inherits from the top-level {@link AgentPaymentsConfig}
+ * when omitted.
+ *
+ * ## Override priority
+ *
+ * When a field exists at both endpoint and root level, **the endpoint value wins**:
+ *
+ * | Field | Resolution (first non-nullish wins) |
+ * |-------|------------------------------------|
+ * | `price` | required on every endpoint; no root-level default |
+ * | `description` | `endpoint.description` only |
+ * | `assets` | `price` record keys (if `price` is a record) → `endpoint.assets` → `config.assets` → `["USDC"]` |
+ * | `payTo` | `endpoint.payTo` → `config.payTo` |
+ * | `networks` | `endpoint.networks` → `config.networks` → inferred from `config.payTo` |
+ * | `protocols` | `intersect(endpoint.protocols, enabled)` → enabled set (x402 always, MPP if a Tempo network is present) |
+ *
+ * ## Examples
+ *
+ * @example
+ * // Inherit everything from root config — one endpoint, one price.
+ * "GET /weather": { price: "$0.01", description: "Weather" }
+ *
+ * @example
+ * // Override payTo to route this endpoint's revenue to a different wallet.
+ * "GET /premium": {
+ *   price: "$0.10",
+ *   payTo: "0xDifferentTreasury",
+ * }
+ *
+ * @example
+ * // Restrict to x402 only (skip MPP) and accept only Base Sepolia.
+ * "GET /restricted": {
+ *   price: "$1.00",
+ *   networks: ["eip155:84532"],
+ *   protocols: ["x402"],
+ * }
+ *
+ * @example
+ * // Per-asset pricing: keys drive which assets the endpoint accepts.
+ * "GET /items": {
+ *   price: { USDC: "$0.05", PAYAI: "100" },
+ * }
+ */
 export interface EndpointConfig {
-  /** Price in USD notation, per-asset map, or dynamic function */
+  /**
+   * What the client pays.
+   * - `string` — same USD/native amount across every accepted asset
+   *   (e.g. `"$0.01"` or `"100"`).
+   * - `Record<string, string>` — per-asset prices; keys also define the
+   *   accepted assets list.
+   * - `(ctx) => …` — resolved per-request from the `RequestContext`
+   *   (useful for tiering, user-specific pricing, etc).
+   */
   price: Price;
-  /** Human-readable description for the 402 challenge */
+  /**
+   * Short human-readable string describing what the client is paying for.
+   * Surfaced in the 402 challenge (x402 `resource.description` and, for
+   * MPP, the `description` auth-param). ASCII-only when MPP is active —
+   * see ARCHITECTURE.md "Security properties" for why.
+   */
   description?: string;
   /**
    * Which assets to accept. Default: global assets or ["USDC"].
@@ -161,8 +219,18 @@ export interface EndpointConfig {
 }
 
 /**
- * Map of "METHOD /path" patterns to endpoint configs.
- * Method prefix is REQUIRED: "GET /weather", "POST /api/*", "* /health"
+ * Map of `"METHOD /path"` patterns to endpoint configs.
+ *
+ * The method prefix is REQUIRED. Supported patterns:
+ *
+ * - **Exact** — `"GET /weather"` matches only `GET /weather`.
+ * - **Wildcard method** — `"* /health"` matches any HTTP method on `/health`.
+ * - **Trailing glob** — `"GET /api/*"` matches `/api` and every sub-path under it.
+ * - **Named param** — `"GET /marketplace/:seller"` matches one segment in
+ *   place of `:seller` (accessible on `RequestContext.path`).
+ *
+ * Matching order: exact first, then wildcard-method exact, then pattern scan
+ * in insertion order. First match wins.
  */
 export type EndpointMap = Record<string, EndpointConfig>;
 
@@ -221,15 +289,37 @@ export interface AgentPaymentsConfig {
 
 // --- Internal resolved config ---
 
+/**
+ * Internal normalized configuration consumed by adapters and the core class.
+ * Built by `resolveConfig(userConfig)` — you shouldn't construct this directly.
+ *
+ * This is the "resolved defaults" that each `EndpointConfig` inherits from.
+ * Every field on an `EndpointConfig` that's omitted falls back to the
+ * corresponding field on this object (see {@link EndpointConfig} for the
+ * full override priority table).
+ */
 export interface ResolvedConfig {
+  /** Endpoint map passed through verbatim from user config. */
   endpoints: EndpointMap;
+  /** Default payment recipient, applied when an endpoint doesn't override `payTo`. */
   payTo: PayTo;
+  /** All networks the SDK considers active for this config. Adapters each filter this further. */
   networks: string[];
+  /** Enabled protocols. `mpp` is only enabled when a Tempo network is present in `networks`. */
   protocols: Protocol[];
+  /**
+   * Merged asset registry — built-in assets (USDC, USDT, pathUSD) combined
+   * with any `CustomAssetDef` entries the user registered via `config.assets`.
+   */
   assetRegistry: AssetRegistry;
-  /** Asset names accepted by default when an endpoint doesn't override. */
+  /**
+   * Asset names accepted by default when an endpoint doesn't override
+   * via `endpoint.assets` or a per-asset `price` record.
+   */
   defaultAssets: string[];
+  /** Null when `x402` is not in `protocols`. */
   x402: ResolvedX402Config | null;
+  /** Null when `mpp` is not enabled (no Tempo network, or explicitly disabled). */
   mpp: ResolvedMppConfig | null;
 }
 
@@ -260,7 +350,18 @@ export interface ProcessResultPassthrough {
 
 export interface ProcessResult402 {
   status: 402;
-  headers: Record<string, string>;
+  /**
+   * Challenge headers to emit on the 402 response.
+   *
+   * A single value per key becomes one header. An array of values becomes
+   * multiple header instances (via `res.appendHeader`-style emission). The
+   * array form is important for `WWW-Authenticate`: RFC 9110 allows either
+   * comma-separated challenges inside one header OR multiple header instances,
+   * and some downstream proxies/clients parse the multi-instance form more
+   * reliably. Adapters return whichever form their protocol emits naturally;
+   * `challenge.ts` preserves distinct values across adapters.
+   */
+  headers: Record<string, string | string[]>;
 }
 
 export interface ProcessResult200 {

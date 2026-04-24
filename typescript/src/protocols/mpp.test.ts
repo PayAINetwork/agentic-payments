@@ -242,3 +242,54 @@ describe("MPP adapter — entry selection", () => {
     expect(options.currency).toBe(PATH_USD.addresses[TEMPO_TESTNET].address);
   });
 });
+
+describe("MPP adapter — WWW-Authenticate multi-challenge", () => {
+  /**
+   * mppx's compose() internally `append`s one `WWW-Authenticate` per method
+   * handler, then returns a Response. WHATWG `Headers.get()` coalesces
+   * those into a single comma-joined string (the RFC 9110 auth-challenge
+   * syntax allows either form). Our adapter passes that string through
+   * verbatim — it's still spec-valid as multiple challenges, and the
+   * adapter contract (`string | string[]`) lets future work swap to the
+   * multi-instance form without a type change.
+   */
+  function buildConfigWithChallenges(wwwAuthValue: string) {
+    const mppx = {
+      tempo: { charge: vi.fn(() => "tempo-charge-handler") },
+      compose: vi.fn(() => async () => ({
+        status: 402,
+        challenge: new Response(null, { headers: { "www-authenticate": wwwAuthValue } }),
+      })),
+    };
+    return {
+      secretKey: "x".repeat(64),
+      realm: "test",
+      mppx,
+    } satisfies ResolvedMppConfig;
+  }
+
+  it("passes mppx's comma-joined multi-challenge WWW-Authenticate through", async () => {
+    const compound =
+      'Payment id="a", realm="test", method="tempo", intent="charge", request="A", ' +
+      'Payment id="b", realm="test", method="tempo", intent="charge", request="B"';
+    const adapter = createMppAdapter(buildConfigWithChallenges(compound));
+
+    const headers = await adapter.generateChallenge({
+      endpoint: { price: "$0.01", description: "multi" },
+      resolvedPrices: [{ asset: PATH_USD, amount: "$0.01" }],
+      networks: ["eip155:42431"],
+      payTo: { "eip155:42431": "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00" },
+      request: { method: "GET", path: "/x", url: "/x", headers: {}, query: {} },
+    });
+
+    // Contract: the key exists and the value preserves BOTH challenges.
+    // Whether the adapter returns a single comma-joined string or an array
+    // of two, both are spec-valid. The test accepts either to keep us free
+    // to refactor the internal shape in future without churning this test.
+    const value = headers["WWW-Authenticate"];
+    expect(value).toBeDefined();
+    const joined = Array.isArray(value) ? value.join(", ") : value;
+    expect(joined).toContain('id="a"');
+    expect(joined).toContain('id="b"');
+  });
+});

@@ -103,19 +103,22 @@ describe("resolveConfig — protocol inference", () => {
 });
 
 describe("resolveConfig — x402 config", () => {
-  it("uses testnet facilitator by default", async () => {
+  // PayAI's facilitator handles both envs via the same URL — the payment's
+  // `network` field tells the facilitator which chain (and thus env) to settle.
+  const PAYAI_FACILITATOR = "https://facilitator.payai.network";
+
+  it("defaults to PayAI's facilitator", async () => {
     const r = await resolveConfig({ payTo: EVM, endpoints: baseEndpoints });
-    expect(r.x402?.facilitatorUrl).toContain("testnet");
+    expect(r.x402?.facilitatorUrl).toBe(PAYAI_FACILITATOR);
   });
 
-  it("uses mainnet facilitator when live: true", async () => {
+  it("uses the same facilitator URL when live: true", async () => {
     const r = await resolveConfig({
       payTo: EVM,
       endpoints: baseEndpoints,
       live: true,
     });
-    expect(r.x402?.facilitatorUrl).toContain("x402.org/facilitator");
-    expect(r.x402?.facilitatorUrl).not.toContain("testnet");
+    expect(r.x402?.facilitatorUrl).toBe(PAYAI_FACILITATOR);
   });
 
   it("respects an explicit x402.facilitatorUrl override", async () => {

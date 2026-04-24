@@ -1,14 +1,32 @@
-import {
-  decodePaymentRequiredHeader,
-  encodePaymentSignatureHeader,
-} from "@x402/core/http";
-import { describe, expect, it } from "vitest";
+import { decodePaymentRequiredHeader, encodePaymentSignatureHeader } from "@x402/core/http";
+import { describe, expect, it, vi } from "vitest";
 import type { CustomAssetDef, ResolvedX402Config } from "../types.js";
 import type { ChallengeContext } from "./types.js";
-import { createX402Adapter } from "./x402.js";
+import { type CreateX402AdapterDeps, createX402Adapter } from "./x402.js";
+
+/**
+ * Build a stub facilitator client whose `getSupported()` returns the given
+ * kinds. `verify` and `settle` are unused in generate-challenge tests and
+ * throw if accidentally called — keeps tests honest about their scope.
+ */
+function stubFacilitator(
+  kinds: Array<{ scheme: string; network: string; extra?: Record<string, unknown> }> = [],
+): CreateX402AdapterDeps["facilitator"] {
+  return {
+    getSupported: vi.fn(async () => ({
+      kinds: kinds.map((k) => ({ x402Version: 2, ...k })),
+    })),
+    verify: vi.fn(async () => {
+      throw new Error("verify should not be called in this test");
+    }),
+    settle: vi.fn(async () => {
+      throw new Error("settle should not be called in this test");
+    }),
+  } as NonNullable<CreateX402AdapterDeps["facilitator"]>;
+}
 
 const CONFIG: ResolvedX402Config = {
-  facilitatorUrl: "https://testnet.x402.org/facilitator",
+  facilitatorUrl: "https://facilitator.payai.network",
   scheme: "exact",
   // Include both Base Sepolia and Tempo testnet so existing tests can exercise
   // multiple networks without being gated by the supportedNetworks filter.
@@ -54,17 +72,34 @@ function buildContext(overrides: Partial<ChallengeContext> = {}): ChallengeConte
   };
 }
 
+/**
+ * Narrow PAYMENT-REQUIRED from the widened `string | string[]` Record. The
+ * x402 adapter always emits a single string for this header (base64 JSON),
+ * so any array would be a regression — throw fast with a descriptive
+ * message instead of carrying a `!` non-null assertion through the tests.
+ */
+function requirePaymentRequired(headers: Record<string, string | string[]>): string {
+  const value = headers["PAYMENT-REQUIRED"];
+  if (value === undefined) {
+    throw new Error("Expected PAYMENT-REQUIRED header to be present");
+  }
+  if (Array.isArray(value)) {
+    throw new Error("Expected PAYMENT-REQUIRED to be a single string, got array");
+  }
+  return value;
+}
+
 /** Helper — run generateChallenge and return the decoded PAYMENT-REQUIRED. */
 async function decode(ctx: ChallengeContext) {
-  const adapter = createX402Adapter(CONFIG);
+  const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
   const headers = await adapter.generateChallenge(ctx);
-  if (!headers["PAYMENT-REQUIRED"]) return null;
-  return decodePaymentRequiredHeader(headers["PAYMENT-REQUIRED"]);
+  if (headers["PAYMENT-REQUIRED"] === undefined) return null;
+  return decodePaymentRequiredHeader(requirePaymentRequired(headers));
 }
 
 describe("x402 adapter — generateChallenge", () => {
   it("emits a base64 PAYMENT-REQUIRED header when prices resolve", async () => {
-    const adapter = createX402Adapter(CONFIG);
+    const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const headers = await adapter.generateChallenge(buildContext());
     expect(headers["PAYMENT-REQUIRED"]).toMatch(/^[A-Za-z0-9+/=]+$/);
   });
@@ -131,7 +166,7 @@ describe("x402 adapter — generateChallenge", () => {
   });
 
   it("returns an empty object when no accepts entries can be built", async () => {
-    const adapter = createX402Adapter(CONFIG);
+    const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const headers = await adapter.generateChallenge(
       buildContext({
         networks: ["eip155:8453"], // Base mainnet — USDC has no address for it in our test setup
@@ -142,9 +177,12 @@ describe("x402 adapter — generateChallenge", () => {
   });
 
   it("uses the configured scheme for every entry", async () => {
-    const adapter = createX402Adapter({ ...CONFIG, scheme: "custom-scheme" });
+    const adapter = createX402Adapter(
+      { ...CONFIG, scheme: "custom-scheme" },
+      { facilitator: stubFacilitator() },
+    );
     const headers = await adapter.generateChallenge(buildContext());
-    const decoded = decodePaymentRequiredHeader(headers["PAYMENT-REQUIRED"]);
+    const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));
     expect(decoded.accepts.every((a) => a.scheme === "custom-scheme")).toBe(true);
   });
 
@@ -170,7 +208,12 @@ describe("x402 adapter — generateChallenge", () => {
     });
   });
 
-  it("leaves extra empty for Solana networks (no EIP-712)", async () => {
+  it("emits Solana feePayer (no EIP-712) in extra for Solana networks", async () => {
+    // Solana x402 payments don't use EIP-712, so `extra` skips name/version.
+    // But PayAI's facilitator requires `extra.feePayer` on Solana entries so
+    // the client knows which address will pay SOL fees for the transaction.
+    // The value comes from NETWORK_X402_EXTRA in assets.ts (sourced from
+    // facilitator's /kinds endpoint).
     const SOLANA_NET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
     const USDC_SVM: CustomAssetDef = {
       name: "USDC",
@@ -181,10 +224,18 @@ describe("x402 adapter — generateChallenge", () => {
         },
       },
     };
-    const adapter = createX402Adapter({
-      ...CONFIG,
-      supportedNetworks: [SOLANA_NET],
-    });
+    // Facilitator declares the Solana feePayer via /supported. Adapter reads it.
+    const facilitator = stubFacilitator([
+      {
+        scheme: "exact",
+        network: SOLANA_NET,
+        extra: { feePayer: "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4" },
+      },
+    ]);
+    const adapter = createX402Adapter(
+      { ...CONFIG, supportedNetworks: [SOLANA_NET] },
+      { facilitator },
+    );
     const headers = await adapter.generateChallenge(
       buildContext({
         resolvedPrices: [{ asset: USDC_SVM, amount: "$0.01" }],
@@ -192,8 +243,13 @@ describe("x402 adapter — generateChallenge", () => {
         payTo: { [SOLANA_NET]: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" },
       }),
     );
-    const decoded = decodePaymentRequiredHeader(headers["PAYMENT-REQUIRED"]);
-    expect(decoded.accepts[0].extra).toEqual({});
+    const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));
+    expect(decoded.accepts[0].extra).toEqual({
+      feePayer: "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4",
+    });
+    // No EIP-712 fields on Solana.
+    expect(decoded.accepts[0].extra).not.toHaveProperty("name");
+    expect(decoded.accepts[0].extra).not.toHaveProperty("version");
   });
 
   it("uses per-network decimals when computing atomic amount", async () => {
@@ -210,10 +266,13 @@ describe("x402 adapter — generateChallenge", () => {
         },
       },
     };
-    const adapter = createX402Adapter({
-      ...CONFIG,
-      supportedNetworks: ["eip155:2368"],
-    });
+    const adapter = createX402Adapter(
+      {
+        ...CONFIG,
+        supportedNetworks: ["eip155:2368"],
+      },
+      { facilitator: stubFacilitator() },
+    );
     const headers = await adapter.generateChallenge(
       buildContext({
         resolvedPrices: [{ asset: PIE, amount: "$0.01" }],
@@ -221,7 +280,7 @@ describe("x402 adapter — generateChallenge", () => {
         payTo: { "eip155:2368": RECIPIENT },
       }),
     );
-    const decoded = decodePaymentRequiredHeader(headers["PAYMENT-REQUIRED"]);
+    const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));
     expect(decoded.accepts[0].amount).toBe("10000000000000000"); // 10^16
   });
 
@@ -233,7 +292,7 @@ describe("x402 adapter — generateChallenge", () => {
       ...CONFIG,
       supportedNetworks: ["eip155:84532"], // Base Sepolia only — Tempo excluded
     };
-    const adapter = createX402Adapter(narrowConfig);
+    const adapter = createX402Adapter(narrowConfig, { facilitator: stubFacilitator() });
     const headers = await adapter.generateChallenge(
       buildContext({
         resolvedPrices: [
@@ -247,7 +306,7 @@ describe("x402 adapter — generateChallenge", () => {
         },
       }),
     );
-    const decoded = decodePaymentRequiredHeader(headers["PAYMENT-REQUIRED"]);
+    const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));
     expect(decoded.accepts).toHaveLength(1);
     expect(decoded.accepts[0].network).toBe("eip155:84532");
   });
@@ -307,7 +366,7 @@ describe("x402 adapter — verifyAndSettle requirements validation", () => {
     // and the server would serve the paid content. The adapter MUST
     // rebuild its own accepts array and only accept a client echo that
     // matches one of our entries byte-for-byte.
-    const adapter = createX402Adapter(CONFIG);
+    const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const header = signatureHeaderWithAccepted({
       scheme: "exact",
       network: "eip155:84532",
@@ -322,7 +381,7 @@ describe("x402 adapter — verifyAndSettle requirements validation", () => {
   });
 
   it("rejects when the network is not one we advertised", async () => {
-    const adapter = createX402Adapter(CONFIG);
+    const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const header = signatureHeaderWithAccepted({
       scheme: "exact",
       network: "eip155:137", // mainnet Polygon — not in the testnet ctx
@@ -337,7 +396,7 @@ describe("x402 adapter — verifyAndSettle requirements validation", () => {
   });
 
   it("rejects when the amount is smaller than what the server quoted", async () => {
-    const adapter = createX402Adapter(CONFIG);
+    const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const header = signatureHeaderWithAccepted({
       scheme: "exact",
       network: "eip155:84532",
@@ -355,7 +414,7 @@ describe("x402 adapter — verifyAndSettle requirements validation", () => {
     // If the client signs against the wrong EIP-712 domain, the resulting
     // signature is valid for *that* domain — but not for the one the
     // server is actually expecting. Let the validation catch it.
-    const adapter = createX402Adapter(CONFIG);
+    const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const header = signatureHeaderWithAccepted({
       scheme: "exact",
       network: "eip155:84532",
@@ -370,7 +429,7 @@ describe("x402 adapter — verifyAndSettle requirements validation", () => {
   });
 
   it("rejects a malformed PAYMENT-SIGNATURE header outright", async () => {
-    const adapter = createX402Adapter(CONFIG);
+    const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const result = await adapter.verifyAndSettle("not-a-real-header", ctx);
     expect(result.status).toBe(402);
   });

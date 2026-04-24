@@ -206,6 +206,14 @@ export const ALL_NETWORKS = {
   testnet: [...EVM_NETWORKS.testnet, ...SVM_NETWORKS.testnet],
 } as const;
 
-/** Default facilitator URL for x402 */
-export const DEFAULT_FACILITATOR_URL = "https://x402.org/facilitator";
-export const DEFAULT_TESTNET_FACILITATOR_URL = "https://testnet.x402.org/facilitator";
+/**
+ * Default facilitator URL for x402.
+ *
+ * PayAI's facilitator routes both mainnet and testnet payments through the
+ * same endpoint — it identifies which env a payment targets from the
+ * `network` field in the payment payload. Use the `live` config flag to
+ * choose which set of chains gets advertised in challenges; the facilitator
+ * URL stays the same.
+ */
+export const DEFAULT_FACILITATOR_URL = "https://facilitator.payai.network";
+export const DEFAULT_TESTNET_FACILITATOR_URL = "https://facilitator.payai.network";

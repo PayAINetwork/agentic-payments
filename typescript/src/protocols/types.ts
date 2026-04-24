@@ -25,8 +25,19 @@ export interface ChallengeContext {
 }
 
 export interface ProtocolAdapter {
-  /** Generate 402 challenge headers for this protocol */
-  generateChallenge(ctx: ChallengeContext): Promise<Record<string, string>>;
+  /**
+   * Generate 402 challenge headers for this protocol.
+   *
+   * Return a `Record<string, string | string[]>`. When a value is an array,
+   * each element is emitted as a separate header instance (e.g. multiple
+   * `WWW-Authenticate` lines). When a value is a string, it becomes one
+   * header whose value may itself contain multiple challenges in the
+   * RFC 9110 comma-joined form.
+   *
+   * Both forms are spec-valid for `WWW-Authenticate`; pick whichever the
+   * underlying protocol library emits naturally.
+   */
+  generateChallenge(ctx: ChallengeContext): Promise<Record<string, string | string[]>>;
 
   /**
    * Verify a payment from the client.

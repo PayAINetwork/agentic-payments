@@ -19,11 +19,80 @@ interface AcceptsEntry {
   extra: Record<string, unknown>;
 }
 
-export function createX402Adapter(config: ResolvedX402Config): ProtocolAdapter {
-  const facilitator = new HTTPFacilitatorClient({
-    url: config.facilitatorUrl,
-  });
+/** Shape of each kind in the facilitator's /supported response we care about. */
+interface SupportedKind {
+  x402Version: number;
+  scheme: string;
+  network: string;
+  extra?: Record<string, unknown>;
+}
+
+/** Minimal subset of HTTPFacilitatorClient we need — keeps test mocks simple. */
+interface FacilitatorClientLike {
+  getSupported(): Promise<{ kinds: SupportedKind[] }>;
+  verify: HTTPFacilitatorClient["verify"];
+  settle: HTTPFacilitatorClient["settle"];
+}
+
+export interface CreateX402AdapterDeps {
+  /**
+   * Injection point for the facilitator client. Defaults to a real
+   * HTTPFacilitatorClient pointed at `config.facilitatorUrl`. Tests can pass
+   * a stub to avoid real network calls.
+   */
+  facilitator?: FacilitatorClientLike;
+}
+
+export function createX402Adapter(
+  config: ResolvedX402Config,
+  deps: CreateX402AdapterDeps = {},
+): ProtocolAdapter {
+  const facilitator: FacilitatorClientLike =
+    deps.facilitator ??
+    new HTTPFacilitatorClient({
+      url: config.facilitatorUrl,
+    });
   const supported = new Set(config.supportedNetworks);
+
+  /**
+   * Lazy cache of per-(scheme, network) `extra` fields fetched from the
+   * facilitator's `/supported` endpoint. Shape of each kind in that
+   * response tells clients what extra metadata they need to sign or
+   * broadcast a payment (e.g. Solana needs `feePayer`; EVM `upto` scheme
+   * carries a `facilitatorAddress`). We use it as the authoritative source
+   * rather than hardcoding values that can drift.
+   *
+   * Resolved once on first use and shared across concurrent requests.
+   * If the request fails, we fall back to an empty map — missing `extra`
+   * fields degrade to missing-but-still-syntactically-valid challenges
+   * rather than taking the whole middleware down.
+   */
+  let extraCache: Promise<Map<string, Record<string, unknown>>> | null = null;
+  function extraByKey(): Promise<Map<string, Record<string, unknown>>> {
+    if (extraCache) return extraCache;
+    extraCache = facilitator
+      .getSupported()
+      .then((response) => {
+        const map = new Map<string, Record<string, unknown>>();
+        for (const kind of response.kinds) {
+          // Only v2 kinds use CAIP-2 networks, which is all this SDK emits.
+          if (kind.x402Version !== 2) continue;
+          if (!kind.extra) continue;
+          map.set(`${kind.scheme}:${kind.network}`, kind.extra);
+        }
+        return map;
+      })
+      .catch((err: unknown) => {
+        if (process.env.PAYAI_DEBUG) {
+          console.error("[@payai/mercantil-agent-sdk] getSupported failed:", err);
+        }
+        // Reset the cache so a retry isn't stuck on a stale failure for the
+        // process lifetime.
+        extraCache = null;
+        return new Map<string, Record<string, unknown>>();
+      });
+    return extraCache;
+  }
 
   /**
    * Build the canonical `accepts` array for this request. Called from both
@@ -32,7 +101,8 @@ export function createX402Adapter(config: ResolvedX402Config): ProtocolAdapter {
    * One entry per (asset × network) the facilitator can settle on, skipping
    * combinations where the asset or payTo isn't configured.
    */
-  function buildAccepts(ctx: ChallengeContext): AcceptsEntry[] {
+  async function buildAccepts(ctx: ChallengeContext): Promise<AcceptsEntry[]> {
+    const extraMap = await extraByKey();
     const accepts: AcceptsEntry[] = [];
     for (const { asset, amount } of ctx.resolvedPrices) {
       for (const network of ctx.networks) {
@@ -41,12 +111,20 @@ export function createX402Adapter(config: ResolvedX402Config): ProtocolAdapter {
         const payToAddress = ctx.payTo[network];
         if (!info || !payToAddress) continue;
 
-        // EIP-712 metadata only applies to EVM networks. Solana x402 payments
-        // don't use EIP-712, so omit extra for solana:* to keep the response clean.
+        // `extra` carries network-specific fields the client needs to sign
+        // or broadcast a payment. Two sources merged in this order:
+        //   1. Facilitator-declared extras from /supported (e.g. Solana's
+        //      `feePayer`, EVM `upto` scheme's `facilitatorAddress`).
+        //   2. EIP-712 metadata (name + version) from the asset registry —
+        //      EVM only; Solana doesn't use EIP-712.
+        // EIP-712 fields can't conflict with facilitator fields in practice
+        // (facilitators never set `name`/`version` per the spec), so the
+        // simple spread order is correct.
+        const facilitatorExtra = extraMap.get(`${config.scheme}:${network}`) ?? {};
         const isEvm = network.startsWith("eip155:");
         const extra: Record<string, unknown> = isEvm
-          ? { name: info.eip712Name, version: info.eip712Version }
-          : {};
+          ? { ...facilitatorExtra, name: info.eip712Name, version: info.eip712Version }
+          : { ...facilitatorExtra };
 
         accepts.push({
           scheme: config.scheme,
@@ -64,7 +142,7 @@ export function createX402Adapter(config: ResolvedX402Config): ProtocolAdapter {
 
   return {
     async generateChallenge(ctx: ChallengeContext): Promise<Record<string, string>> {
-      const accepts = buildAccepts(ctx);
+      const accepts = await buildAccepts(ctx);
       if (accepts.length === 0) return {};
 
       const paymentRequired = {
@@ -102,7 +180,7 @@ export function createX402Adapter(config: ResolvedX402Config): ProtocolAdapter {
       // byte-for-byte one of our entries. Then we use our own entry (not the
       // client's echo) as the `requirements` arg for verify/settle, in case any
       // mismatch-tolerant fields slipped through matching.
-      const serverAccepts = buildAccepts(ctx);
+      const serverAccepts = await buildAccepts(ctx);
       const requirements = serverAccepts.find((entry) =>
         acceptsEntryEquals(entry, paymentPayload.accepted as AcceptsEntry),
       );
