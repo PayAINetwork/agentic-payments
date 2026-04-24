@@ -245,13 +245,15 @@ describe("MPP adapter — entry selection", () => {
 
 describe("MPP adapter — WWW-Authenticate multi-challenge", () => {
   /**
-   * mppx's compose() internally `append`s one `WWW-Authenticate` per method
-   * handler, then returns a Response. WHATWG `Headers.get()` coalesces
-   * those into a single comma-joined string (the RFC 9110 auth-challenge
-   * syntax allows either form). Our adapter passes that string through
-   * verbatim — it's still spec-valid as multiple challenges, and the
-   * adapter contract (`string | string[]`) lets future work swap to the
-   * multi-instance form without a type change.
+   * mppx internally `append`s one `WWW-Authenticate` per method handler,
+   * then returns a Response. WHATWG `Headers.get()` coalesces those into a
+   * single comma-joined string — which our adapter splits back into
+   * individual challenges so the middleware emits them as distinct
+   * `WWW-Authenticate` header lines. That multi-line form matches the
+   * MPP spec's Appendix B.4 example:
+   *
+   *   WWW-Authenticate: Payment id="a", realm="…", …
+   *   WWW-Authenticate: Payment id="b", realm="…", …
    */
   function buildConfigWithChallenges(wwwAuthValue: string) {
     const mppx = {
@@ -268,7 +270,11 @@ describe("MPP adapter — WWW-Authenticate multi-challenge", () => {
     } satisfies ResolvedMppConfig;
   }
 
-  it("passes mppx's comma-joined multi-challenge WWW-Authenticate through", async () => {
+  it("splits mppx's comma-joined output into an array so the middleware emits separate WWW-Authenticate lines", async () => {
+    // REGRESSION GUARD: the MPP spec's Appendix B.4 example uses multiple
+    // WWW-Authenticate header lines (one per challenge). If we regress to
+    // emitting a single comma-joined header, clients that only parse the
+    // first challenge would see reduced payment options.
     const compound =
       'Payment id="a", realm="test", method="tempo", intent="charge", request="A", ' +
       'Payment id="b", realm="test", method="tempo", intent="charge", request="B"';
@@ -282,14 +288,28 @@ describe("MPP adapter — WWW-Authenticate multi-challenge", () => {
       request: { method: "GET", path: "/x", url: "/x", headers: {}, query: {} },
     });
 
-    // Contract: the key exists and the value preserves BOTH challenges.
-    // Whether the adapter returns a single comma-joined string or an array
-    // of two, both are spec-valid. The test accepts either to keep us free
-    // to refactor the internal shape in future without churning this test.
     const value = headers["WWW-Authenticate"];
-    expect(value).toBeDefined();
-    const joined = Array.isArray(value) ? value.join(", ") : value;
-    expect(joined).toContain('id="a"');
-    expect(joined).toContain('id="b"');
+    expect(Array.isArray(value)).toBe(true);
+    expect(value).toHaveLength(2);
+    expect((value as string[])[0]).toMatch(/^Payment id="a"/);
+    expect((value as string[])[1]).toMatch(/^Payment id="b"/);
+  });
+
+  it("returns a single string when there's only one challenge", async () => {
+    const single = 'Payment id="solo", realm="test", method="tempo", intent="charge", request="S"';
+    const adapter = createMppAdapter(buildConfigWithChallenges(single));
+
+    const headers = await adapter.generateChallenge({
+      endpoint: { price: "$0.01", description: "single" },
+      resolvedPrices: [{ asset: PATH_USD, amount: "$0.01" }],
+      networks: ["eip155:42431"],
+      payTo: { "eip155:42431": "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00" },
+      request: { method: "GET", path: "/x", url: "/x", headers: {}, query: {} },
+    });
+
+    // One challenge → string, not a single-element array. Keeps the emitted
+    // header count consistent with what the adapter actually received.
+    expect(typeof headers["WWW-Authenticate"]).toBe("string");
+    expect(headers["WWW-Authenticate"]).toBe(single);
   });
 });

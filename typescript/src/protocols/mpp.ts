@@ -70,7 +70,7 @@ export function createMppAdapter(config: ResolvedMppConfig): ProtocolAdapter {
   }
 
   return {
-    async generateChallenge(ctx: ChallengeContext): Promise<Record<string, string>> {
+    async generateChallenge(ctx: ChallengeContext): Promise<Record<string, string | string[]>> {
       const entries = buildEntries(ctx);
       if (entries.length === 0) return {};
 
@@ -79,7 +79,17 @@ export function createMppAdapter(config: ResolvedMppConfig): ProtocolAdapter {
       const result = await mppx.compose(...entries)(req);
 
       const wwwAuth = result.challenge?.headers.get("www-authenticate");
-      return wwwAuth ? { "WWW-Authenticate": wwwAuth } : {};
+      if (!wwwAuth) return {};
+
+      // mppx appends one `WWW-Authenticate` per method via Headers.append, but
+      // WHATWG Headers.get collapses those into a single comma-joined string.
+      // Split it back into individual challenges so the middleware emits them
+      // as separate WWW-Authenticate header lines — matching the MPP spec's
+      // Appendix B.4 example. Safe to split on `, Payment ` because `Payment`
+      // is the scheme name and never appears inside an auth-param key
+      // (`id`, `realm`, `method`, `intent`, `request`, `description`, `expires`).
+      const challenges = wwwAuth.split(/, (?=Payment )/);
+      return { "WWW-Authenticate": challenges.length === 1 ? challenges[0] : challenges };
     },
 
     async verifyAndSettle(
