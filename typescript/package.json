@@ -1,5 +1,5 @@
 {
-  "name": "@payai/agent-payments",
+  "name": "@payai/mercantil-agent-sdk",
   "version": "0.1.0",
   "description": "Accept x402 and MPP agentic payments through a single integration",
   "type": "module",
@@ -13,18 +13,6 @@
     "./express": {
       "types": "./dist/middleware/express.d.ts",
       "default": "./dist/middleware/express.js"
-    },
-    "./hono": {
-      "types": "./dist/middleware/hono.d.ts",
-      "default": "./dist/middleware/hono.js"
-    },
-    "./next": {
-      "types": "./dist/middleware/next.d.ts",
-      "default": "./dist/middleware/next.js"
-    },
-    "./elysia": {
-      "types": "./dist/middleware/elysia.d.ts",
-      "default": "./dist/middleware/elysia.js"
     }
   },
   "files": [
@@ -35,8 +23,14 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "format": "biome format --write src/",
+    "typecheck": "tsc --noEmit",
+    "publint": "publint",
+    "attw": "attw --pack . --ignore-rules cjs-resolves-to-esm no-resolution",
+    "size": "size-limit",
+    "check": "npm run typecheck && npm run lint && npm run publint && npm run attw && npm run size"
   },
   "dependencies": {
     "@x402/core": "^2.7.0",
@@ -44,22 +38,10 @@
   },
   "peerDependencies": {
     "express": "^4.0.0 || ^5.0.0",
-    "hono": ">=4",
-    "next": ">=14",
-    "elysia": ">=1",
     "viem": ">=2.39.0"
   },
   "peerDependenciesMeta": {
     "express": {
-      "optional": true
-    },
-    "hono": {
-      "optional": true
-    },
-    "next": {
-      "optional": true
-    },
-    "elysia": {
       "optional": true
     },
     "viem": {
@@ -67,14 +49,29 @@
     }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@biomejs/biome": "^2.4.12",
+    "@size-limit/file": "^12.1.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "publint": "^0.3.18",
+    "size-limit": "^12.1.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.0",
-    "vitest": "^3.0.0",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^3.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "2 KB"
+    },
+    {
+      "path": "dist/middleware/express.js",
+      "limit": "10 KB"
+    }
+  ]
 }

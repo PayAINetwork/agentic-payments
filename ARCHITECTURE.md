@@ -154,16 +154,16 @@ The shorthand is detected by `isPayToShorthand()` — an object whose keys are a
 - **MPP HMAC secret** is 32 bytes from `crypto.randomBytes`, persisted with mode `0o600`. The `.payai/` directory gets an auto-written `.gitignore` (contents: `*`) before the secret file is created, so the key can't be accidentally committed even if the user's repo-level gitignore doesn't cover `.payai/`.
 - **Non-ASCII descriptions** with MPP enabled are rejected at config load with a `ConfigError` naming the offending endpoint + character index. The MPP draft allows UTF-8 descriptions but doesn't specify on-wire encoding in `WWW-Authenticate`, and Node's fetch enforces ByteString on header values — failing loud at startup beats silently dropping the MPP challenge at request time.
 - **Response buffering** ensures paid-for content is never served without corresponding settlement: any failure in the `settleAndReceipt` path drops the buffered response body before sending `402`.
+- **x402 `paymentPayload.accepted` validation** — the adapter never forwards the client's claimed requirements directly to the facilitator. It rebuilds its own `accepts` array via `buildAccepts(ctx)` and requires the client's echoed `accepted` to field-equal exactly one server-built entry; the server's entry (not the client's) is the `requirements` arg passed to `verify`/`settle`. This closes the payment-bypass attack where a client would otherwise sign a self-paying dust transfer to any wallet it chose on any facilitator-supported chain. Regression guards live in `src/protocols/x402.test.ts` (`verifyAndSettle requirements validation`).
 
 ## Known sharp edges
 
-- **x402 payment-requirements match** — the adapter currently trusts the client's `paymentPayload.accepted` and passes it directly to `facilitator.verify`/`settle`. The reference `@x402/core` server validates `accepted` deep-equals one of the server's `generateChallenge` outputs before calling the facilitator. See the open security-review finding for the remediation plan.
 - **Managed mode** (`apiKey`) throws `ConfigError` today — the PayAI API client is a stub. Manual mode (`payTo`) is fully supported.
 - **Python and Go SDKs** are placeholder directories. Only the TypeScript SDK ships today.
 
 ## Testing
 
-- **Unit tests** — 100 tests across `utils.test.ts`, `config.test.ts`, `protocols/x402.test.ts`, `protocols/mpp.test.ts`. Run with `npm test` in `typescript/`. Vitest, ~350ms.
+- **Unit tests** — 105 tests across `utils.test.ts`, `config.test.ts`, `protocols/x402.test.ts`, `protocols/mpp.test.ts`. Run with `npm test` in `typescript/`. Vitest, ~500ms.
 - **Smoke tests** — `examples/typescript/npm run smoke` spawns each example via its own `npm start`, probes the 402 response, decodes the x402 `accepts` and MPP `request` payloads, and asserts canonical amounts + chainId + presence of both protocol headers. CI-ready.
 
 Relevant test files for specific invariants:

@@ -1,0 +1,20 @@
+{
+  "name": "example-99-validation-errors",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shows a config-time ConfigError: non-ASCII description with MPP enabled.",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env server.ts"
+  },
+  "dependencies": {
+    "@payai/mercantil-agent-sdk": "file:../../../typescript",
+    "express": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}
