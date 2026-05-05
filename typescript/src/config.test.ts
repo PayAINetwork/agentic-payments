@@ -3,8 +3,8 @@ import { resolveConfig } from "./config.js";
 import { ConfigError } from "./errors.js";
 import type { AgentPaymentsConfig } from "./types.js";
 
-const EVM = "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00";
-const SVM = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+const EVM = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+const SVM = "ExamP1eWaLLet1111111111111111111111111111111";
 const HMAC = "a".repeat(64);
 
 /**

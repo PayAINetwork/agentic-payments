@@ -13,9 +13,9 @@ const MODE = process.env.MODE ?? "test";
 const LIVE = MODE === "live";
 const PORT = Number(process.env.PORT ?? 4000);
 const PAY_TO_EVM =
-  process.env.PAY_TO_EVM ?? "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00";
+  process.env.PAY_TO_EVM ?? "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 const PAY_TO_SVM =
-  process.env.PAY_TO_SVM ?? "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+  process.env.PAY_TO_SVM ?? "ExamP1eWaLLet1111111111111111111111111111111";
 
 const BASE_NETWORK = LIVE ? "eip155:8453" : "eip155:84532";
 const TEMPO_NETWORK = LIVE ? "eip155:4217" : "eip155:42431";

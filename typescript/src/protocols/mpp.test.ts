@@ -18,7 +18,7 @@ const PATH_USD: CustomAssetDef = {
 };
 
 const TEMPO_TESTNET = "eip155:42431";
-const RECIPIENT = "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00";
+const RECIPIENT = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
 /**
  * Build a ResolvedMppConfig with a mock mppx whose `compose` records every
@@ -284,7 +284,7 @@ describe("MPP adapter — WWW-Authenticate multi-challenge", () => {
       endpoint: { price: "$0.01", description: "multi" },
       resolvedPrices: [{ asset: PATH_USD, amount: "$0.01" }],
       networks: ["eip155:42431"],
-      payTo: { "eip155:42431": "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00" },
+      payTo: { "eip155:42431": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" },
       request: { method: "GET", path: "/x", url: "/x", headers: {}, query: {} },
     });
 
@@ -303,7 +303,7 @@ describe("MPP adapter — WWW-Authenticate multi-challenge", () => {
       endpoint: { price: "$0.01", description: "single" },
       resolvedPrices: [{ asset: PATH_USD, amount: "$0.01" }],
       networks: ["eip155:42431"],
-      payTo: { "eip155:42431": "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00" },
+      payTo: { "eip155:42431": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" },
       request: { method: "GET", path: "/x", url: "/x", headers: {}, query: {} },
     });
 

@@ -1,6 +1,6 @@
-# 03 · Cross-Chain (explicit CAIP-2 payTo)
+# 03 · Cross-Chain (different recipients per network)
 
-Most servers can just use the `{ evm, solana }` shorthand (see example 01). This example uses the **explicit CAIP-2 record** form — one address per specific network — for cases the shorthand can't express: restricting payments to a subset of chains, using a different wallet per chain, or settling each chain on its own dedicated treasury.
+This example routes payments from different chains to different wallets — Base payments go to one address, Solana payments to another, Tempo to a third. That per-network recipient control is the main reason to use the **explicit CAIP-2 record** form for `payTo` instead of the `{ evm, solana }` shorthand (see example 01). Other use cases: restricting payment to a subset of chains, or settling each chain into a dedicated treasury.
 
 ## Run
 

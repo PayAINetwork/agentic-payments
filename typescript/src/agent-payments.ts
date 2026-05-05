@@ -47,7 +47,11 @@ import { expandPayTo, matchEndpoint, resolveAssets, resolvePrice } from "./utils
  * const ap = new AgentPayments({ payTo: "0x...", endpoints: { ... } });
  * const result = await ap.processRequest(requestContext);
  * if (result.status === 402) return new Response(null, { status: 402, headers: result.headers });
- * // …serve your handler, then:
+ * // Run your handler logic to produce a response object, then pass it to
+ * // settleAndReceipt. Settlement (x402 facilitator call / MPP receipt
+ * // attachment) happens inside that call — before the response reaches the
+ * // client. Return the settled response; do not send anything beforehand.
+ * const myResponse = await runHandler(requestContext);
  * return result.settleAndReceipt(myResponse);
  */
 export class AgentPayments {

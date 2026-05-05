@@ -142,7 +142,7 @@ describe("resolvePrice", () => {
 
 describe("isEvmAddress", () => {
   it("accepts a well-formed 40-hex address", () => {
-    expect(isEvmAddress("0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00")).toBe(true);
+    expect(isEvmAddress("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")).toBe(true);
   });
 
   it("accepts mixed case", () => {
@@ -162,13 +162,13 @@ describe("isEvmAddress", () => {
   });
 
   it("rejects Solana-style addresses", () => {
-    expect(isEvmAddress("7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU")).toBe(false);
+    expect(isEvmAddress("ExamP1eWaLLet1111111111111111111111111111111")).toBe(false);
   });
 });
 
 describe("expandPayTo", () => {
-  const EVM = "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00";
-  const SVM = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+  const EVM = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+  const SVM = "ExamP1eWaLLet1111111111111111111111111111111";
 
   it("spreads an EVM address across all supported EVM mainnet networks", () => {
     const out = expandPayTo(EVM, false);
@@ -242,7 +242,7 @@ describe("expandPayTo", () => {
 
 describe("inferNetworks", () => {
   it("returns the keys from an expanded payTo", () => {
-    const nets = inferNetworks("0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00", true);
+    const nets = inferNetworks("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", true);
     expect(nets).toContain("eip155:84532"); // Base Sepolia
     expect(nets).toContain("eip155:42431"); // Tempo testnet
     expect(nets).toContain("eip155:80002"); // Polygon Amoy

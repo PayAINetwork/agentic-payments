@@ -53,7 +53,7 @@ const PATH_USD: CustomAssetDef = {
   },
 };
 
-const RECIPIENT = "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00";
+const RECIPIENT = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
 function buildContext(overrides: Partial<ChallengeContext> = {}): ChallengeContext {
   return {
@@ -112,7 +112,10 @@ describe("x402 adapter — generateChallenge", () => {
     expect(decoded?.accepts[0].amount).toBe("10000"); // $0.01 * 10^6
   });
 
-  it("builds one accepts entry per (asset × network) combination", async () => {
+  it("builds one accepts entry per (scheme × asset × network) combination", async () => {
+    // scheme is fixed to config.scheme — all entries share it. If multi-scheme
+    // support is added, config.scheme would become an array and each scheme
+    // would get its own entry per (asset × network).
     const decoded = await decode(
       buildContext({
         resolvedPrices: [
@@ -134,6 +137,10 @@ describe("x402 adapter — generateChallenge", () => {
 
     expect(usdcEntry?.asset).toBe(USDC.addresses["eip155:84532"].address);
     expect(pathEntry?.asset).toBe(PATH_USD.addresses["eip155:42431"].address);
+
+    // Every entry carries the configured scheme.
+    expect(usdcEntry?.scheme).toBe(CONFIG.scheme);
+    expect(pathEntry?.scheme).toBe(CONFIG.scheme);
   });
 
   it("skips combinations where the asset has no address on the network", async () => {
@@ -240,7 +247,7 @@ describe("x402 adapter — generateChallenge", () => {
       buildContext({
         resolvedPrices: [{ asset: USDC_SVM, amount: "$0.01" }],
         networks: [SOLANA_NET],
-        payTo: { [SOLANA_NET]: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" },
+        payTo: { [SOLANA_NET]: "ExamP1eWaLLet1111111111111111111111111111111" },
       }),
     );
     const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));

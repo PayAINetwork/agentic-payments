@@ -1,6 +1,6 @@
 # 05 · Lifecycle Hooks
 
-All four hooks wired with `console.log` so you can see exactly when each one fires.
+Lifecycle hooks let you run your own code at each stage of the payment flow: grant free access to trusted callers before payment is checked, reject verified payments that fail your own business rules, record successful settlements, or log failures for alerting. All four hooks are wired with `console.log` so you can see exactly when each one fires.
 
 | Hook | When | Can modify flow? |
 |------|------|------------------|

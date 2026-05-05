@@ -32,7 +32,7 @@ app.use(
     // with a single wallet per family. Replace with your own addresses.
     payTo: {
       evm: "0xYourEvmWallet",
-      solana: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+      solana: "ExamP1eWaLLet1111111111111111111111111111111",
     },
     endpoints: {
       "GET /weather": { price: "$0.01", description: "Current weather" },

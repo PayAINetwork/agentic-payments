@@ -10,8 +10,8 @@ import { agentPayments } from "@payai/mercantil-agent-sdk/express";
 
 const MODE = process.env.MODE ?? "test"; // "test" or "live"
 const PORT = Number(process.env.PORT ?? 4000);
-const PAY_TO_EVM = process.env.PAY_TO_EVM ?? "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00";
-const PAY_TO_SVM = process.env.PAY_TO_SVM ?? "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+const PAY_TO_EVM = process.env.PAY_TO_EVM ?? "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+const PAY_TO_SVM = process.env.PAY_TO_SVM ?? "ExamP1eWaLLet1111111111111111111111111111111";
 
 const app = express();
 

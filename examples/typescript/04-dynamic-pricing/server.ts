@@ -13,12 +13,12 @@ import { agentPayments } from "@payai/mercantil-agent-sdk/express";
 
 const MODE = process.env.MODE ?? "test";
 const PORT = Number(process.env.PORT ?? 4000);
-const PAY_TO_EVM = process.env.PAY_TO_EVM ?? "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00";
-const PAY_TO_SVM = process.env.PAY_TO_SVM ?? "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+const PAY_TO_EVM = process.env.PAY_TO_EVM ?? "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+const PAY_TO_SVM = process.env.PAY_TO_SVM ?? "ExamP1eWaLLet1111111111111111111111111111111";
 
 // Fake seller directory for the marketplace route.
 const SELLERS: Record<string, string> = {
-  alice: "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00",
+  alice: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
   bob: "0x8bA1f109551bD432803012645Ac136ddd64DBA72",
 };
 
