@@ -1,0 +1,52 @@
+name: Bug Report
+description: File a bug report for @payai/mercantil-agent-sdk
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Fill in as much detail as you can — a minimal reproduction is the fastest path to a fix.
+  - type: input
+    id: version
+    attributes:
+      label: SDK version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Which protocol is affected?
+      options:
+        - x402
+        - MPP
+        - Both
+        - Unknown / N/A
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: What happened? What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: The smallest `server.ts` (or equivalent) that reproduces the issue. Remove everything that isn't directly related to the bug.
+      render: typescript
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / logs
+      description: Paste the full error message, stack trace, or relevant log lines.
+      render: text
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues before filing this one.
+          required: true

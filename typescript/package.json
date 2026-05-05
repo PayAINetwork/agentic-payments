@@ -30,7 +30,8 @@
     "publint": "publint",
     "attw": "attw --pack . --ignore-rules cjs-resolves-to-esm no-resolution",
     "size": "size-limit",
-    "check": "npm run typecheck && npm run lint && npm run publint && npm run attw && npm run size"
+    "check": "npm run typecheck && npm run lint && npm run publint && npm run attw && npm run size",
+    "docs:generate": "typedoc"
   },
   "dependencies": {
     "@x402/core": "^2.7.0",
@@ -51,12 +52,15 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",
     "@biomejs/biome": "^2.4.12",
+    "@changesets/cli": "^2.31.0",
     "@size-limit/file": "^12.1.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
     "publint": "^0.3.18",
     "size-limit": "^12.1.0",
     "tsup": "^8.4.0",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
   },

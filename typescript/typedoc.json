@@ -1,0 +1,30 @@
+{
+  "entryPoints": ["src/index.ts"],
+  "plugin": ["typedoc-plugin-markdown"],
+  "out": "../docs-output/sdk/api",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "fileExtension": ".mdx",
+  "outputFileStrategy": "members",
+  "flattenOutputFiles": false,
+  "indexFormat": "table",
+  "parametersFormat": "table",
+  "propertiesFormat": "table",
+  "typeDeclarationFormat": "table",
+  "useCodeBlocks": true,
+  "expandObjects": false,
+  "groupOrder": [
+    "Functions",
+    "Classes",
+    "Interfaces",
+    "Type Aliases",
+    "Enumerations",
+    "*"
+  ],
+  "categoryOrder": ["*"],
+  "navigationModel": {
+    "excludeGroups": false
+  }
+}

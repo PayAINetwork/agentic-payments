@@ -45,3 +45,34 @@ jobs:
 
       - name: Check bundle size
         run: npm run size
+
+  changeset:
+    name: Changeset
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: typescript
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - run: npm ci
+
+      - name: Check for changeset when src files changed
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- typescript/src/)
+          if [ -n "$CHANGED" ]; then
+            echo "Source files changed — verifying changeset is present..."
+            npx changeset status --since=origin/${{ github.base_ref }}
+          else
+            echo "No source files changed — changeset not required."
+          fi
