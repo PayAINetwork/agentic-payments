@@ -1,5 +1,5 @@
 {
-  "name": "@payai/mercantil-agent-sdk",
+  "name": "@payai/agentic-payments",
   "version": "0.1.0",
   "description": "Accept x402 and MPP agentic payments through a single integration",
   "type": "module",
@@ -20,6 +20,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "prepublishOnly": "npm run build",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",

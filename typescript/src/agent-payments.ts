@@ -1,5 +1,6 @@
 import { generateChallengeHeaders } from "./challenge.js";
 import { resolveConfig } from "./config.js";
+import { PayAIApiClient } from "./payai-api.js";
 import { detectProtocol } from "./protocols/detection.js";
 import { createMppAdapter } from "./protocols/mpp.js";
 import type { ChallengeContext, ProtocolAdapter, ResolvedAssetPrice } from "./protocols/types.js";
@@ -9,8 +10,10 @@ import type {
   CustomAssetDef,
   EndpointConfig,
   HookContext,
+  ManagedApiConfig,
   PaymentMetadata,
   PayToValue,
+  Price,
   PriceValue,
   ProcessResult,
   Protocol,
@@ -59,6 +62,7 @@ export class AgentPayments {
   private resolved: ResolvedConfig | null = null;
   private readonly adapters = new Map<Protocol, ProtocolAdapter>();
   private initPromise: Promise<void> | null = null;
+  private managedClient: PayAIApiClient | null = null;
 
   /**
    * @param config - User-facing configuration. Validated + normalized lazily
@@ -68,6 +72,14 @@ export class AgentPayments {
    */
   constructor(config: AgentPaymentsConfig) {
     this.config = config;
+    if (config.apiKey) {
+      void this.ensureInitialized().catch((error) => {
+        console.warn(
+          "[@payai/agentic-payments] Managed mode initialization failed; the next protected request will retry.",
+          error,
+        );
+      });
+    }
   }
 
   /**
@@ -76,7 +88,12 @@ export class AgentPayments {
    * double-create protocol adapters.
    */
   private ensureInitialized(): Promise<void> {
-    if (!this.initPromise) this.initPromise = this.initialize();
+    if (!this.initPromise) {
+      this.initPromise = this.initialize().catch((error) => {
+        this.initPromise = null;
+        throw error;
+      });
+    }
     return this.initPromise;
   }
 
@@ -85,10 +102,60 @@ export class AgentPayments {
    * and instantiate protocol adapters for every enabled protocol.
    */
   private async initialize(): Promise<void> {
-    const resolved = await resolveConfig(this.config);
+    if (this.config.apiKey) {
+      this.managedClient = new PayAIApiClient({
+        apiKey: this.config.apiKey,
+        baseUrl: this.config.payaiApiBaseUrl,
+        appUrl: this.config.appUrl,
+        onConfigChanged: (managedConfig) => this.applyResolvedConfig(managedConfig),
+      });
+      await this.managedClient.init(this.config);
+      this.managedClient.startEvents();
+      return;
+    }
+
+    await this.applyResolvedConfig();
+  }
+
+  private async applyResolvedConfig(managedConfig?: ManagedApiConfig): Promise<void> {
+    const resolved = await resolveConfig(this.config, { managedConfig });
     this.resolved = resolved;
+    this.adapters.clear();
     if (resolved.x402) this.adapters.set("x402", createX402Adapter(resolved.x402));
     if (resolved.mpp) this.adapters.set("mpp", createMppAdapter(resolved.mpp));
+  }
+
+  /**
+   * Re-publish the SDK's endpoint manifest to the PayAI dashboard.
+   *
+   * Use this when your set of protected routes changes at runtime — e.g.
+   * a marketplace where merchants add new products, a multi-tenant app
+   * where each tenant exposes its own endpoints, or a CMS-driven API.
+   *
+   * The new map fully replaces the previously registered endpoints (the
+   * portal's stale-endpoint pruning takes care of removing routes that
+   * disappear from the latest call). Pass through any other config fields
+   * you want to update at the same time; otherwise the original config
+   * supplied at construction is reused.
+   *
+   * Only effective in managed mode (when `apiKey` is set). In manual mode
+   * this is a no-op, since there is no dashboard to push to.
+   *
+   * @example
+   * const handler = agentPayments({ apiKey, endpoints: initial });
+   * app.use(handler);
+   *
+   * setInterval(async () => {
+   *   const endpoints = await loadEndpointsFromDb();
+   *   await handler.registerEndpoints(endpoints);
+   * }, 60_000);
+   */
+  async registerEndpoints(endpoints: AgentPaymentsConfig["endpoints"]): Promise<void> {
+    this.config.endpoints = endpoints;
+    await this.ensureInitialized();
+    if (this.managedClient) {
+      await this.managedClient.registerEndpoints(this.config);
+    }
   }
 
   /**
@@ -123,7 +190,7 @@ export class AgentPayments {
     }
 
     // --- Resolve per-request dynamics ---
-    const resolvedPrice = await resolvePrice(endpoint.price, request);
+    const resolvedPrice = await resolvePrice(requireResolvedPrice(endpoint.price), request);
     const resolvedAssets = resolveAssets(
       resolvedPrice,
       endpoint.assets,
@@ -134,7 +201,7 @@ export class AgentPayments {
 
     const rawPayTo = endpoint.payTo ?? resolved.payTo;
     const payToValue = typeof rawPayTo === "function" ? await rawPayTo(request) : rawPayTo;
-    const payTo = expandPayTo(payToValue as PayToValue, !(this.config.live ?? false));
+    const payTo = expandPayTo(payToValue as PayToValue, !resolved.live);
 
     const networks = endpoint.networks ?? resolved.networks;
 
@@ -208,6 +275,14 @@ export class AgentPayments {
 
     return result;
   }
+}
+
+function requireResolvedPrice(price: EndpointConfig["price"]): Price {
+  if (price === undefined) {
+    throw new Error("Resolved endpoint is missing a price.");
+  }
+
+  return price;
 }
 
 /**

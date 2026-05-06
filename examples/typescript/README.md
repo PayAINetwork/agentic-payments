@@ -1,4 +1,4 @@
-# @payai/mercantil-agent-sdk — TypeScript Examples
+# @payai/agentic-payments — TypeScript Examples
 
 Each example directory is a **standalone npm package**. Pick one, copy it out of this repo, run `npm install && npm start`, and it just works. This directory also serves as an npm-workspaces monorepo so a single `npm install` at the root wires all examples at once for development.
 
@@ -47,14 +47,14 @@ MODE=live npm start
 
 ## Examples
 
-| # | What it demonstrates |
-|---|----------------------|
-| [01 · basic-express](./01-basic-express) | Minimum config: one EVM address, one endpoint, both protocols |
-| [02 · multi-asset](./02-multi-asset) | Uniform pricing across tokens, plus per-asset price records |
-| [03 · cross-chain](./03-cross-chain) | Explicit CAIP-2 `payTo` covering Base + Tempo + Solana |
-| [04 · dynamic-pricing](./04-dynamic-pricing) | Dynamic `price` and `payTo` functions (tiering, marketplaces) |
-| [05 · hooks](./05-hooks) | All four lifecycle hooks (`onRequest`, `onPaymentVerified`, etc.) |
-| [99 · validation-errors](./99-validation-errors) | Surfaces a config-time `ConfigError` on non-ASCII descriptions |
+| #                                                | What it demonstrates                                              |
+| ------------------------------------------------ | ----------------------------------------------------------------- |
+| [01 · basic-express](./01-basic-express)         | Minimum config: one EVM address, one endpoint, both protocols     |
+| [02 · multi-asset](./02-multi-asset)             | Uniform pricing across tokens, plus per-asset price records       |
+| [03 · cross-chain](./03-cross-chain)             | Explicit CAIP-2 `payTo` covering Base + Tempo + Solana            |
+| [04 · dynamic-pricing](./04-dynamic-pricing)     | Dynamic `price` and `payTo` functions (tiering, marketplaces)     |
+| [05 · hooks](./05-hooks)                         | All four lifecycle hooks (`onRequest`, `onPaymentVerified`, etc.) |
+| [99 · validation-errors](./99-validation-errors) | Surfaces a config-time `ConfigError` on non-ASCII descriptions    |
 
 ## Clients (in `shared/clients/`)
 
@@ -73,4 +73,4 @@ npm run pay:x402
 
 ## Publishing note
 
-Each example's `package.json` pins `"@payai/mercantil-agent-sdk": "file:../../../typescript"` so the workspace links to local source during development. Before publishing this directory (or referencing it externally), those file deps will need to be swapped for the published version.
+Each example's `package.json` pins `"@payai/agentic-payments": "file:../../../typescript"` so the workspace links to local source during development. Before publishing this directory (or referencing it externally), those file deps will need to be swapped for the published version.

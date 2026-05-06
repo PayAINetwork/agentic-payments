@@ -7,6 +7,7 @@ import type {
   EndpointMap,
   PayToShorthand,
   PayToValue,
+  Price,
   PriceValue,
   RequestContext,
 } from "./types.js";
@@ -137,10 +138,7 @@ export function toAtomicUnits(price: string, decimals: number): string {
 /**
  * Resolve a Price value (which may be a function) to a concrete PriceValue.
  */
-export async function resolvePrice(
-  price: EndpointConfig["price"],
-  ctx: RequestContext,
-): Promise<PriceValue> {
+export async function resolvePrice(price: Price, ctx: RequestContext): Promise<PriceValue> {
   if (typeof price === "function") {
     return await price(ctx);
   }

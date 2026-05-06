@@ -7,7 +7,7 @@
  * Run: `npm install && npm start`
  */
 import express from "express";
-import { agentPayments } from "@payai/mercantil-agent-sdk/express";
+import { agentPayments } from "@payai/agentic-payments/express";
 
 const MODE = process.env.MODE ?? "test";
 const LIVE = MODE === "live";

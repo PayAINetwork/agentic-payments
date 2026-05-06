@@ -98,9 +98,9 @@ export const USDC: CustomAssetDef = {
       address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       decimals: 6, // Solana mainnet-beta
     },
-    "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1": {
-      address: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-      decimals: 6, // Solana devnet
+    "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z": {
+      address: "6LmSRCiu3z6NCSpF19oz1pHXkYkN4jWbj9K1nVELpDkT",
+      decimals: 6, // Solana testnet
     },
   },
 };
@@ -187,7 +187,7 @@ export const EVM_NETWORKS = {
 /** SVM networks PayAI's x402 facilitator can settle on. */
 export const SVM_NETWORKS = {
   mainnet: ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"],
-  testnet: ["solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"],
+  testnet: ["solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z"],
 } as const;
 
 /**
