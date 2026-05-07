@@ -1,9 +1,9 @@
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { AgentPayments } from '../agent-payments.js';
-import type { AgentPaymentsConfig, ProcessResult200, RequestContext } from '../types.js';
+import type { NextFunction, Request, RequestHandler, Response } from "express";
+import { AgentPayments } from "../agent-payments.js";
+import type { AgentPaymentsConfig, ProcessResult200, RequestContext } from "../types.js";
 
-export { AgentPayments } from '../agent-payments.js';
-export type { AgentPaymentsConfig } from '../types.js';
+export { AgentPayments } from "../agent-payments.js";
+export type { AgentPaymentsConfig } from "../types.js";
 
 /**
  * Express RequestHandler returned by {@link agentPayments}, augmented with
@@ -20,7 +20,7 @@ export interface AgentPaymentsHandler extends RequestHandler {
    * Useful for marketplaces/CMS-style apps where routes change at runtime.
    * See {@link AgentPayments.registerEndpoints}.
    */
-  registerEndpoints: (endpoints: AgentPaymentsConfig['endpoints']) => Promise<void>;
+  registerEndpoints: (endpoints: AgentPaymentsConfig["endpoints"]) => Promise<void>;
 }
 
 /**
@@ -40,22 +40,22 @@ export function agentPayments(config: AgentPaymentsConfig): AgentPaymentsHandler
   const ap = new AgentPayments(config);
 
   const handler = (async (req: Request, res: Response, next: NextFunction) => {
-    let result: import('../types.js').ProcessResult;
+    let result: import("../types.js").ProcessResult;
     try {
       result = await ap.processRequest(buildRequestContext(req));
     } catch (err) {
       return next(err);
     }
 
-    if (result.status === 'passthrough') return next();
+    if (result.status === "passthrough") return next();
 
     if (result.status === 402) {
       for (const [key, value] of Object.entries(result.headers)) {
         res.setHeader(key, value);
       }
       res.status(402).json({
-        error: 'Payment Required',
-        message: 'This endpoint requires payment. See response headers for payment options.',
+        error: "Payment Required",
+        message: "This endpoint requires payment. See response headers for payment options.",
       });
       return;
     }
@@ -69,7 +69,7 @@ export function agentPayments(config: AgentPaymentsConfig): AgentPaymentsHandler
   //   app.use(handler);
   //   await handler.registerEndpoints(newRoutes);
   handler.agentPayments = ap;
-  handler.registerEndpoints = endpoints => ap.registerEndpoints(endpoints);
+  handler.registerEndpoints = (endpoints) => ap.registerEndpoints(endpoints);
 
   return handler;
 }
@@ -77,16 +77,16 @@ export function agentPayments(config: AgentPaymentsConfig): AgentPaymentsHandler
 export const payai = agentPayments;
 
 type BufferedCall =
-  | ['writeHead', Parameters<Response['writeHead']>]
-  | ['write', Parameters<Response['write']>]
-  | ['end', Parameters<Response['end']>]
-  | ['flushHeaders', []];
+  | ["writeHead", Parameters<Response["writeHead"]>]
+  | ["write", Parameters<Response["write"]>]
+  | ["end", Parameters<Response["end"]>]
+  | ["flushHeaders", []];
 
 async function runWithSettlement(
   result: ProcessResult200,
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   // Expose payment metadata to downstream handlers
   (req as unknown as { payment: unknown }).payment = result.payment;
@@ -99,32 +99,32 @@ async function runWithSettlement(
   let buffered: BufferedCall[] = [];
   let settled = false;
   let endCalled!: () => void;
-  const endPromise = new Promise<void>(resolve => {
+  const endPromise = new Promise<void>((resolve) => {
     endCalled = resolve;
   });
 
   res.writeHead = ((...args: Parameters<typeof originalWriteHead>) => {
     if (settled) return originalWriteHead(...args);
-    buffered.push(['writeHead', args]);
+    buffered.push(["writeHead", args]);
     return res;
   }) as typeof originalWriteHead;
 
   res.write = ((...args: Parameters<typeof originalWrite>) => {
     if (settled) return originalWrite(...args);
-    buffered.push(['write', args]);
+    buffered.push(["write", args]);
     return true;
   }) as typeof originalWrite;
 
   res.end = ((...args: Parameters<typeof originalEnd>) => {
     if (settled) return originalEnd(...args);
-    buffered.push(['end', args]);
+    buffered.push(["end", args]);
     endCalled();
     return res;
   }) as typeof originalEnd;
 
   res.flushHeaders = () => {
     if (settled) return originalFlushHeaders();
-    buffered.push(['flushHeaders', []]);
+    buffered.push(["flushHeaders", []]);
   };
 
   next();
@@ -140,10 +140,10 @@ async function runWithSettlement(
 
   const replay = () => {
     for (const [method, args] of buffered) {
-      if (method === 'writeHead')
+      if (method === "writeHead")
         originalWriteHead(...(args as Parameters<typeof originalWriteHead>));
-      else if (method === 'write') originalWrite(...(args as Parameters<typeof originalWrite>));
-      else if (method === 'end') originalEnd(...(args as Parameters<typeof originalEnd>));
+      else if (method === "write") originalWrite(...(args as Parameters<typeof originalWrite>));
+      else if (method === "end") originalEnd(...(args as Parameters<typeof originalEnd>));
       else originalFlushHeaders();
     }
     buffered = [];
@@ -159,8 +159,8 @@ async function runWithSettlement(
   try {
     const body = Buffer.concat(
       buffered.flatMap(([m, args]) =>
-        (m === 'write' || m === 'end') && args[0] ? [toBuffer(args[0])] : []
-      )
+        (m === "write" || m === "end") && args[0] ? [toBuffer(args[0])] : [],
+      ),
     );
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(res.getHeaders())) {
@@ -168,7 +168,7 @@ async function runWithSettlement(
     }
 
     const settledResponse = await result.settleAndReceipt(
-      new globalThis.Response(body, { status: res.statusCode, headers })
+      new globalThis.Response(body, { status: res.statusCode, headers }),
     );
 
     // Apply settlement headers (receipt / PAYMENT-RESPONSE) onto the real response.
@@ -182,7 +182,7 @@ async function runWithSettlement(
     buffered = [];
     restore();
     res.status(402).json({
-      error: 'Settlement Failed',
+      error: "Settlement Failed",
       message: err instanceof Error ? err.message : String(err),
     });
     return;
@@ -194,7 +194,7 @@ async function runWithSettlement(
 
 function isContentHeader(key: string): boolean {
   const k = key.toLowerCase();
-  return k === 'content-length' || k === 'content-type' || k === 'transfer-encoding';
+  return k === "content-length" || k === "content-type" || k === "transfer-encoding";
 }
 
 function toBuffer(value: unknown): Buffer {

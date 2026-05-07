@@ -1,5 +1,5 @@
-import crypto from 'node:crypto';
-import { PayAIApiError } from './errors.js';
+import crypto from "node:crypto";
+import { PayAIApiError } from "./errors.js";
 import type {
   AgentPaymentsConfig,
   EndpointConfig,
@@ -7,9 +7,9 @@ import type {
   ManagedApiKey,
   ManagedApiKeyCredentials,
   Protocol,
-} from './types.js';
+} from "./types.js";
 
-const DEFAULT_API_BASE_URL = 'https://merchant.payai.network';
+const DEFAULT_API_BASE_URL = "https://merchant.payai.network";
 const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
@@ -62,8 +62,8 @@ export class PayAIApiClient {
   private readonly baseUrl: string;
   private readonly appUrl: string | null;
   private readonly fetchImpl: typeof fetch;
-  private readonly onConfigChanged?: PayAIApiClientOptions['onConfigChanged'];
-  private readonly onLiveModeChanged?: PayAIApiClientOptions['onLiveModeChanged'];
+  private readonly onConfigChanged?: PayAIApiClientOptions["onConfigChanged"];
+  private readonly onLiveModeChanged?: PayAIApiClientOptions["onLiveModeChanged"];
   private abortController: AbortController | null = null;
   private currentConfig: ManagedApiConfig | null = null;
   private live = false;
@@ -72,13 +72,13 @@ export class PayAIApiClient {
   constructor(apiKey: ManagedApiKey, baseUrl?: string);
   constructor(optionsOrApiKey: PayAIApiClientOptions | ManagedApiKey, baseUrl?: string) {
     const options =
-      typeof optionsOrApiKey === 'string' || isManagedApiKeyCredentials(optionsOrApiKey)
+      typeof optionsOrApiKey === "string" || isManagedApiKeyCredentials(optionsOrApiKey)
         ? { apiKey: optionsOrApiKey, baseUrl }
         : optionsOrApiKey;
 
     this.apiKey = options.apiKey;
     this.baseUrl = normalizeBaseUrl(
-      options.baseUrl ?? process.env.PAYAI_API_URL ?? DEFAULT_API_BASE_URL
+      options.baseUrl ?? process.env.PAYAI_API_URL ?? DEFAULT_API_BASE_URL,
     );
     this.appUrl = resolveAppUrl(options.appUrl);
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -95,8 +95,8 @@ export class PayAIApiClient {
   }
 
   async init(config: AgentPaymentsConfig): Promise<ManagedApiConfig> {
-    const apiConfig = await this.request<ManagedApiConfig>('/api/v1/sdk/init', {
-      method: 'POST',
+    const apiConfig = await this.request<ManagedApiConfig>("/api/v1/sdk/init", {
+      method: "POST",
       body: JSON.stringify(buildInitPayload(config, this.appUrl)),
     });
 
@@ -105,8 +105,8 @@ export class PayAIApiClient {
   }
 
   async fetchConfig(): Promise<ManagedApiConfig> {
-    const apiConfig = await this.request<ManagedApiConfig>('/api/v1/sdk/config', {
-      method: 'GET',
+    const apiConfig = await this.request<ManagedApiConfig>("/api/v1/sdk/config", {
+      method: "GET",
     });
 
     await this.applyConfig(apiConfig);
@@ -127,7 +127,7 @@ export class PayAIApiClient {
 
   async registerEndpoints(configOrEndpoints: AgentPaymentsConfig | Record<string, EndpointConfig>) {
     const config =
-      'endpoints' in configOrEndpoints ? configOrEndpoints : { endpoints: configOrEndpoints };
+      "endpoints" in configOrEndpoints ? configOrEndpoints : { endpoints: configOrEndpoints };
     await this.init(config as AgentPaymentsConfig);
   }
 
@@ -150,18 +150,18 @@ export class PayAIApiClient {
   }
 
   private async consumeEventStream(signal: AbortSignal): Promise<void> {
-    const response = await this.fetchWithAuth('/api/v1/sdk/events', {
-      method: 'GET',
-      headers: { Accept: 'text/event-stream' },
+    const response = await this.fetchWithAuth("/api/v1/sdk/events", {
+      method: "GET",
+      headers: { Accept: "text/event-stream" },
       signal,
     });
 
     if (!response.ok) throw await toApiError(response);
-    if (!response.body) throw new PayAIApiError('SDK event stream response did not include a body');
+    if (!response.body) throw new PayAIApiError("SDK event stream response did not include a body");
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
 
     try {
       while (!signal.aborted) {
@@ -180,13 +180,13 @@ export class PayAIApiClient {
   }
 
   private async handleSseEvent(event: SseEvent): Promise<void> {
-    if (event.event === 'config') {
-      await this.applyConfig(parseJson<ManagedApiConfig>(event.data, 'config event'));
+    if (event.event === "config") {
+      await this.applyConfig(parseJson<ManagedApiConfig>(event.data, "config event"));
       return;
     }
 
-    if (event.event === 'live_mode_changed') {
-      const payload = parseJson<LiveModeChangedPayload>(event.data, 'live mode event');
+    if (event.event === "live_mode_changed") {
+      const payload = parseJson<LiveModeChangedPayload>(event.data, "live mode event");
       const config = await this.fetchConfig();
       await this.onLiveModeChanged?.(config.live ?? payload.live);
     }
@@ -205,10 +205,10 @@ export class PayAIApiClient {
 
   private async fetchWithAuth(path: string, init: RequestInit): Promise<Response> {
     const headers = new Headers(init.headers);
-    headers.set('Authorization', `Bearer ${createAuthToken(this.apiKey)}`);
+    headers.set("Authorization", `Bearer ${createAuthToken(this.apiKey)}`);
 
-    if (init.body && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
+    if (init.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
     }
 
     return this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers });
@@ -233,23 +233,23 @@ async function retryRequest(request: () => Promise<Response>): Promise<Response>
   }
 
   if (lastError instanceof Error) throw lastError;
-  throw new PayAIApiError('PayAI API request failed');
+  throw new PayAIApiError("PayAI API request failed");
 }
 
 function createAuthToken(apiKey: ManagedApiKey): string {
-  if (typeof apiKey === 'string') return apiKey;
+  if (typeof apiKey === "string") return apiKey;
   return generateJwt(apiKey);
 }
 
 function generateJwt(credentials: ManagedApiKeyCredentials): string {
   const now = Math.floor(Date.now() / 1_000);
-  const header = { alg: 'EdDSA', typ: 'JWT', kid: credentials.keyId };
+  const header = { alg: "EdDSA", typ: "JWT", kid: credentials.keyId };
   const payload = {
     sub: credentials.keyId,
-    iss: 'payai',
+    iss: "payai",
     iat: now,
     exp: now + 120,
-    jti: crypto.randomBytes(16).toString('hex'),
+    jti: crypto.randomBytes(16).toString("hex"),
   };
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
@@ -260,25 +260,25 @@ function generateJwt(credentials: ManagedApiKeyCredentials): string {
 }
 
 function parsePrivateKey(secret: string): crypto.KeyObject {
-  if (!secret.startsWith('payai_sk_')) {
-    throw new PayAIApiError('Invalid PayAI API key secret format');
+  if (!secret.startsWith("payai_sk_")) {
+    throw new PayAIApiError("Invalid PayAI API key secret format");
   }
 
   return crypto.createPrivateKey({
-    key: Buffer.from(secret.slice('payai_sk_'.length), 'base64'),
-    format: 'der',
-    type: 'pkcs8',
+    key: Buffer.from(secret.slice("payai_sk_".length), "base64"),
+    format: "der",
+    type: "pkcs8",
   });
 }
 
 function buildInitPayload(config: AgentPaymentsConfig, appUrl: string | null): InitPayload {
   return {
     sdkVersion: process.env.npm_package_version ?? null,
-    packageName: process.env.npm_package_name ?? '@payai/agentic-payments',
+    packageName: process.env.npm_package_name ?? "@payai/agentic-payments",
     environment: process.env.NODE_ENV ?? null,
     appUrl,
     endpoints: Object.entries(config.endpoints).flatMap(([key, endpoint]) =>
-      buildEndpointPayload(key, endpoint)
+      buildEndpointPayload(key, endpoint),
     ),
   };
 }
@@ -300,11 +300,7 @@ function buildInitPayload(config: AgentPaymentsConfig, appUrl: string | null): I
  * the user to fill it in via the editable Server URL field on /onboarding/endpoints.
  */
 function resolveAppUrl(explicit?: string): string | null {
-  const candidate = firstNonEmpty([
-    explicit,
-    process.env.PAYAI_APP_URL,
-    detectHostedAppUrl(),
-  ]);
+  const candidate = firstNonEmpty([explicit, process.env.PAYAI_APP_URL, detectHostedAppUrl()]);
   return candidate ? stripTrailingSlash(candidate) : null;
 }
 
@@ -321,17 +317,17 @@ function detectHostedAppUrl(): string | null {
 
 function firstNonEmpty(values: Array<string | null | undefined>): string | null {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
   }
   return null;
 }
 
 function ensureScheme(url: string): string {
-  return url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`;
+  return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
 }
 
 function stripTrailingSlash(value: string): string {
-  return value.endsWith('/') ? value.slice(0, -1) : value;
+  return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 function buildEndpointPayload(key: string, endpoint: EndpointConfig): InitEndpointPayload[] {
@@ -343,7 +339,7 @@ function buildEndpointPayload(key: string, endpoint: EndpointConfig): InitEndpoi
   return [
     {
       method: method.toUpperCase(),
-      route: route.startsWith('/') ? route : `/${route}`,
+      route: route.startsWith("/") ? route : `/${route}`,
       price: serializePrice(endpoint.price),
       description: endpoint.description ?? null,
       assets: serializeStringValues(endpoint.assets),
@@ -353,8 +349,8 @@ function buildEndpointPayload(key: string, endpoint: EndpointConfig): InitEndpoi
   ];
 }
 
-function serializePrice(price: EndpointConfig['price']): string | null {
-  if (typeof price === 'string') return price;
+function serializePrice(price: EndpointConfig["price"]): string | null {
+  if (typeof price === "string") return price;
   if (isStringRecord(price)) return JSON.stringify(price);
   return null;
 }
@@ -362,16 +358,16 @@ function serializePrice(price: EndpointConfig['price']): string | null {
 function serializeStringValues(values: readonly unknown[] | undefined): string[] {
   if (!values) return [];
 
-  return values.flatMap(value => {
-    if (typeof value === 'string') return [value];
-    if (isRecord(value) && typeof value.name === 'string') return [value.name];
+  return values.flatMap((value) => {
+    if (typeof value === "string") return [value];
+    if (isRecord(value) && typeof value.name === "string") return [value.name];
     return [];
   });
 }
 
 async function toApiError(response: Response): Promise<PayAIApiError> {
-  const text = await response.text().catch(() => '');
-  const detail = text ? `: ${text}` : '';
+  const text = await response.text().catch(() => "");
+  const detail = text ? `: ${text}` : "";
   return new PayAIApiError(`PayAI API returned ${response.status}${detail}`, response.status);
 }
 
@@ -388,31 +384,31 @@ function parseJson<TValue>(text: string, label: string): TValue {
   try {
     return JSON.parse(text) as TValue;
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'invalid JSON';
+    const message = error instanceof Error ? error.message : "invalid JSON";
     throw new PayAIApiError(`Failed to parse PayAI ${label} response: ${message}`);
   }
 }
 
 export function parseSseBuffer(buffer: string): { events: SseEvent[]; remainder: string } {
-  const normalized = buffer.replace(/\r\n/g, '\n');
-  const chunks = normalized.split('\n\n');
-  const remainder = chunks.pop() ?? '';
+  const normalized = buffer.replace(/\r\n/g, "\n");
+  const chunks = normalized.split("\n\n");
+  const remainder = chunks.pop() ?? "";
   return { events: chunks.flatMap(parseSseChunk), remainder };
 }
 
 function parseSseChunk(chunk: string): SseEvent[] {
-  const event: SseEvent = { id: null, event: 'message', data: '' };
+  const event: SseEvent = { id: null, event: "message", data: "" };
 
-  for (const line of chunk.split('\n')) {
-    if (!line || line.startsWith(':')) continue;
+  for (const line of chunk.split("\n")) {
+    if (!line || line.startsWith(":")) continue;
 
-    const separatorIndex = line.indexOf(':');
+    const separatorIndex = line.indexOf(":");
     const field = separatorIndex === -1 ? line : line.slice(0, separatorIndex);
-    const value = separatorIndex === -1 ? '' : line.slice(separatorIndex + 1).trimStart();
+    const value = separatorIndex === -1 ? "" : line.slice(separatorIndex + 1).trimStart();
 
-    if (field === 'id') event.id = value;
-    else if (field === 'event') event.event = value;
-    else if (field === 'data') event.data = event.data ? `${event.data}\n${value}` : value;
+    if (field === "id") event.id = value;
+    else if (field === "event") event.event = value;
+    else if (field === "data") event.data = event.data ? `${event.data}\n${value}` : value;
   }
 
   return event.data ? [event] : [];
@@ -424,33 +420,33 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
     if (!signal) return;
 
     signal.addEventListener(
-      'abort',
+      "abort",
       () => {
         clearTimeout(timeout);
-        reject(new PayAIApiError('PayAI API event stream stopped'));
+        reject(new PayAIApiError("PayAI API event stream stopped"));
       },
-      { once: true }
+      { once: true },
     );
   });
 }
 
 function normalizeBaseUrl(url: string): string {
-  return url.endsWith('/') ? url.slice(0, -1) : url;
+  return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
 function base64UrlEncode(value: string | Buffer): string {
-  const buffer = typeof value === 'string' ? Buffer.from(value) : value;
-  return buffer.toString('base64url');
+  const buffer = typeof value === "string" ? Buffer.from(value) : value;
+  return buffer.toString("base64url");
 }
 
 function isManagedApiKeyCredentials(value: unknown): value is ManagedApiKeyCredentials {
-  return isRecord(value) && typeof value.keyId === 'string' && typeof value.secret === 'string';
+  return isRecord(value) && typeof value.keyId === "string" && typeof value.secret === "string";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.values(value).every(item => typeof item === 'string');
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }
