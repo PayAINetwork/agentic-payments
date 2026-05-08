@@ -1,0 +1,116 @@
+name: Update Docs on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-docs:
+    name: Sync docs to PayAINetwork/docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install SDK dependencies
+        run: npm ci
+        working-directory: typescript
+
+      - name: Generate API reference (typedoc → MDX)
+        run: npm run docs:generate
+        working-directory: typescript
+
+      - name: Resolve previous release tag
+        id: tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_TAG="${{ github.event.release.tag_name }}"
+          PREV_TAG=$(gh release list --repo $GITHUB_REPOSITORY --limit 10 --json tagName \
+            | jq -r '[.[].tagName] | map(select(. != "'"$NEW_TAG"'")) | .[0] // ""')
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "New: $NEW_TAG  Previous: ${PREV_TAG:-(none)}"
+
+      - name: Generate source diff since previous release
+        run: |
+          NEW_TAG="${{ steps.tags.outputs.new_tag }}"
+          PREV_TAG="${{ steps.tags.outputs.prev_tag }}"
+          if [ -n "$PREV_TAG" ]; then
+            git diff "${PREV_TAG}...${NEW_TAG}" -- typescript/src/ > /tmp/sdk-diff.patch
+          else
+            git show "${NEW_TAG}" -- typescript/src/ > /tmp/sdk-diff.patch
+          fi
+          echo "Diff: $(wc -l < /tmp/sdk-diff.patch) lines"
+
+      # Requires a fine-grained PAT with contents:write on PayAINetwork/docs,
+      # stored as DOCS_REPO_PAT in this repository's secrets.
+      - name: Checkout docs repo
+        uses: actions/checkout@v4
+        with:
+          repository: PayAINetwork/docs
+          token: ${{ secrets.DOCS_REPO_PAT }}
+          path: docs-repo
+
+      - name: Sync API reference
+        run: |
+          rm -rf docs-repo/sdk/api
+          cp -r docs-output/sdk/api docs-repo/sdk/api
+
+      - name: Update prose docs with Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          node scripts/update-docs.mjs \
+            /tmp/sdk-diff.patch \
+            "${{ steps.tags.outputs.prev_tag }}" \
+            "${{ steps.tags.outputs.new_tag }}" \
+            "../docs-repo"
+        working-directory: typescript
+
+      - name: Open docs PR
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_REPO_PAT }}
+        run: |
+          cd docs-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="release/sdk-${{ steps.tags.outputs.new_tag }}"
+          git checkout -b "$BRANCH"
+          git add .
+
+          if git diff --cached --quiet; then
+            echo "No doc changes — skipping PR."
+            exit 0
+          fi
+
+          git commit -m "docs: update SDK docs for ${{ steps.tags.outputs.new_tag }}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --repo PayAINetwork/docs \
+            --title "docs: SDK update for ${{ steps.tags.outputs.new_tag }}" \
+            --body "$(cat << 'EOF'
+          Auto-generated after publishing ${{ steps.tags.outputs.new_tag }}.
+
+          **What this PR contains:**
+          - Regenerated API reference (typedoc → MDX) reflecting the new release
+          - Claude-reviewed prose updates to introduction, quickstart, and configuration pages
+
+          **Before merging:**
+          - Review the Mintlify preview deployment on this PR
+          - Check that any new config options or behavior changes are accurately described
+          - Merge once satisfied — docs go live immediately on merge
+          EOF
+          )" \
+            --base main \
+            --head "$BRANCH"
