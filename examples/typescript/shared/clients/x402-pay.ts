@@ -42,9 +42,13 @@ if (!evmPrivateKey && !svmSecretKey) {
 
 const SEP = "═".repeat(60);
 
+// Payment receipt/response headers are never truncated — they're the proof of payment.
+const FULL_VALUE_HEADERS = new Set(["payment-required", "payment-signature", "payment-response", "payment-receipt"]);
+
 function printHeaders(headers: Headers): void {
   for (const [key, value] of headers.entries()) {
-    const display = value.length > 120 ? `${value.slice(0, 120)}…` : value;
+    const full = FULL_VALUE_HEADERS.has(key.toLowerCase());
+    const display = !full && value.length > 120 ? `${value.slice(0, 120)}…` : value;
     console.log(`  ${key}: ${display}`);
   }
 }
