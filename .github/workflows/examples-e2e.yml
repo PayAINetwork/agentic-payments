@@ -1,0 +1,82 @@
+name: Examples E2E (mainnet)
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+# Prevent concurrent runs — each run spends real funds from a shared wallet.
+concurrency:
+  group: examples-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: Mainnet payment e2e
+    runs-on: ubuntu-latest
+
+    env:
+      EVM_PRIVATE_KEY: ${{ secrets.E2E_EVM_PRIVATE_KEY }}
+      SVM_PRIVATE_KEY: ${{ secrets.E2E_SVM_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            typescript/package-lock.json
+            examples/typescript/package-lock.json
+
+      - name: Install SDK
+        working-directory: typescript
+        run: npm ci
+
+      - name: Build SDK
+        working-directory: typescript
+        run: npm run build
+
+      - name: Install examples
+        working-directory: examples/typescript
+        run: npm ci
+
+      - name: Start example server (mainnet)
+        working-directory: examples/typescript/01-basic-express
+        run: |
+          MODE=live \
+          PAY_TO_EVM=${{ secrets.E2E_PAY_TO_EVM }} \
+          PAY_TO_SVM=${{ secrets.E2E_PAY_TO_SVM }} \
+          PORT=4000 \
+          npm start &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 30); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/weather)
+            if [ "$status" = "402" ]; then
+              echo "Server ready (got 402 as expected)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server did not return 402 within 30s"
+          exit 1
+
+      - name: x402 — EVM mainnet (Base)
+        working-directory: examples/typescript
+        run: npm run pay:x402
+
+      - name: x402 — Solana mainnet
+        working-directory: examples/typescript
+        run: NETWORK=solana npm run pay:x402
+
+      - name: MPP — Tempo mainnet
+        working-directory: examples/typescript
+        run: npm run pay:mpp
+
+      - name: Stop server
+        if: always()
+        run: kill $SERVER_PID 2>/dev/null || true
