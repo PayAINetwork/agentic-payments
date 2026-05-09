@@ -14,8 +14,13 @@ const LIVE = MODE === "live";
 const PORT = Number(process.env.PORT ?? 4000);
 const PAY_TO_EVM =
   process.env.PAY_TO_EVM ?? "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+// Unlike EVM, a Solana payTo address must have an existing USDC Associated
+// Token Account (ATA) or the facilitator's settlement transaction will fail.
+// The default below is a known-good address with ATAs on both devnet and mainnet.
+// Set PAY_TO_SVM to your own address only after running:
+//   spl-token create-account EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v <YOUR_ADDR>
 const PAY_TO_SVM =
-  process.env.PAY_TO_SVM ?? "ExamP1eWaLLet1111111111111111111111111111111";
+  process.env.PAY_TO_SVM ?? "H32YnqbzL62YkHMSCzfKcLry9yuipwwx1EMztiCSPhjb";
 
 const BASE_NETWORK = LIVE ? "eip155:8453" : "eip155:84532";
 const TEMPO_NETWORK = LIVE ? "eip155:4217" : "eip155:42431";
