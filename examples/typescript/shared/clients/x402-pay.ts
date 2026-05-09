@@ -30,6 +30,7 @@ const url = process.env.URL ?? `${BASE_URL}/weather`;
 const evmPrivateKey = process.env.EVM_PRIVATE_KEY as `0x${string}` | undefined;
 const svmSecretKey = process.env.SVM_PRIVATE_KEY;
 const networkFilter = process.env.NETWORK?.toLowerCase();
+const method = (process.env.METHOD ?? "GET").toUpperCase();
 
 if (!evmPrivateKey && !svmSecretKey) {
   console.error("At least one of EVM_PRIVATE_KEY or SVM_PRIVATE_KEY is required.");
@@ -58,10 +59,10 @@ function printHeaders(headers: Headers): void {
 console.log(`${SEP}`);
 console.log("  PHASE 1 · Request (no payment)");
 console.log(`${SEP}`);
-console.log(`→ GET ${url}`);
+console.log(`→ ${method} ${url}`);
 console.log("  (no payment headers)\n");
 
-const challengeRes = await fetch(url);
+const challengeRes = await fetch(url, method !== "GET" ? { method } : undefined);
 
 console.log(`← HTTP ${challengeRes.status} ${challengeRes.statusText}`);
 printHeaders(challengeRes.headers);
@@ -132,7 +133,7 @@ const paymentHeaders = httpClient.encodePaymentSignatureHeader(paymentPayload);
 console.log(`\n${SEP}`);
 console.log("  PHASE 2 · Request (with payment)");
 console.log(`${SEP}`);
-console.log(`→ GET ${url}`);
+console.log(`→ ${method} ${url}`);
 for (const [key, value] of Object.entries(paymentHeaders)) {
   const display = value.length > 120 ? `${value.slice(0, 120)}…` : value;
   console.log(`  ${key}: ${display}`);
@@ -152,7 +153,7 @@ if (sigHeader) {
 }
 console.log();
 
-const paidRes = await fetch(url, { headers: paymentHeaders });
+const paidRes = await fetch(url, { method, headers: paymentHeaders });
 
 // ─── Phase 3: settlement receipt ─────────────────────────────────────────────
 

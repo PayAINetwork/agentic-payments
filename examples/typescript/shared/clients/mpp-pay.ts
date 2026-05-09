@@ -16,6 +16,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { BASE_URL } from "../env.js";
 
 const url = process.env.URL ?? `${BASE_URL}/weather`;
+const method = (process.env.METHOD ?? "GET").toUpperCase();
 const privateKey = process.env.EVM_PRIVATE_KEY;
 
 if (!privateKey) {
@@ -24,7 +25,7 @@ if (!privateKey) {
 }
 
 const account = privateKeyToAccount(privateKey as `0x${string}`);
-console.log(`Paying as ${account.address} → ${url}\n`);
+console.log(`Paying as ${account.address} → ${method} ${url}\n`);
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ const mppx = Mppx.create({
   fetch: loggingFetch,
 });
 
-const res = await mppx.fetch(url);
+const res = await mppx.fetch(url, method !== "GET" ? { method } : undefined);
 const body = await res.text();
 console.log("Body:", body);
 process.exit(res.status === 200 ? 0 : 1);

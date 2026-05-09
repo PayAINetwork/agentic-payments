@@ -38,11 +38,11 @@ app.use(
     assets: ["USDC", "pathUSD"],
     endpoints: {
       "POST /translate": {
-        price: (ctx) => (ctx.query.tier === "pro" ? "$0.10" : "$0.03"),
+        price: (ctx) => (ctx.query.tier === "pro" ? "$0.02" : "$0.01"),
         description: "Translate - pro tier costs more",
       },
       "GET /marketplace/:seller": {
-        price: "$0.05",
+        price: "$0.01",
         description: "Pay the seller directly",
         payTo: (ctx) => {
           const seller = ctx.path.split("/").pop() ?? "";
