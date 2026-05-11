@@ -20,6 +20,16 @@ jobs:
       SVM_PRIVATE_KEY: ${{ secrets.E2E_SVM_PRIVATE_KEY }}
 
     steps:
+      # Mask all four secret values immediately so they never appear in any
+      # subsequent step output, even if printed via a shell variable or
+      # passed through to a subprocess (e.g. the server startup log).
+      - name: Mask secrets
+        run: |
+          echo "::add-mask::${{ secrets.E2E_EVM_PRIVATE_KEY }}"
+          echo "::add-mask::${{ secrets.E2E_SVM_PRIVATE_KEY }}"
+          echo "::add-mask::${{ secrets.E2E_PAY_TO_EVM }}"
+          echo "::add-mask::${{ secrets.E2E_PAY_TO_SVM }}"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
