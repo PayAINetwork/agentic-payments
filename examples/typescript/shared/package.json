@@ -6,6 +6,8 @@
   "description": "Internal tooling: smoke test and sample clients. Not part of the DX-facing examples.",
   "dependencies": {
     "@x402/core": "^2.7.0",
+    "@x402/evm": "^2.11.0",
+    "@x402/svm": "^2.11.0",
     "mppx": "^0.4.0",
     "viem": "^2.39.0"
   }

@@ -40,6 +40,15 @@ app.use(
 
 app.get("/weather", (_req, res) => res.json({ ok: true }));
 
+// Explicit error handler — writes ConfigError.message to stderr so the smoke
+// test can detect it in process output regardless of Node/Express version.
+// Without this, Express's default handler sends the error only in the HTTP
+// response body, which the smoke test doesn't capture on the server side.
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error(err.message);
+  res.status(500).json({ error: err.message });
+});
+
 const server = app.listen(PORT, () => {
   console.log(
     `[99-validation-errors] listening on :${PORT} - first request should surface a ConfigError.`,

@@ -15,9 +15,9 @@
   ],
   "scripts": {
     "smoke": "tsx shared/scripts/smoke.ts",
-    "probe": "tsx shared/clients/challenge-probe.ts",
-    "pay:x402": "tsx shared/clients/x402-pay.ts",
-    "pay:mpp": "tsx shared/clients/mpp-pay.ts"
+    "probe": "tsx --env-file-if-exists=.env shared/clients/challenge-probe.ts",
+    "pay:x402": "tsx --env-file-if-exists=.env shared/clients/x402-pay.ts",
+    "pay:mpp": "tsx --env-file-if-exists=.env shared/clients/mpp-pay.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
