@@ -75,17 +75,32 @@ jobs:
           echo "Server did not return 402 within 30s"
           exit 1
 
+      # Each payment step retries up to 3 times with a 10s backoff.
+      # The facilitator and chain RPCs are external services; transient
+      # network failures from the Actions runner are the main flakiness source.
       - name: x402 — EVM mainnet (Base)
         working-directory: examples/typescript
-        run: npm run pay:x402
+        run: |
+          for i in 1 2 3; do
+            npm run pay:x402 && break
+            [ $i -lt 3 ] && echo "Attempt $i failed, retrying in 10s..." && sleep 10
+          done
 
       - name: x402 — Solana mainnet
         working-directory: examples/typescript
-        run: NETWORK=solana npm run pay:x402
+        run: |
+          for i in 1 2 3; do
+            NETWORK=solana npm run pay:x402 && break
+            [ $i -lt 3 ] && echo "Attempt $i failed, retrying in 10s..." && sleep 10
+          done
 
       - name: MPP — Tempo mainnet
         working-directory: examples/typescript
-        run: npm run pay:mpp
+        run: |
+          for i in 1 2 3; do
+            npm run pay:mpp && break
+            [ $i -lt 3 ] && echo "Attempt $i failed, retrying in 10s..." && sleep 10
+          done
 
       - name: Stop server
         if: always()
