@@ -204,6 +204,11 @@ export function createX402Adapter(
       }
 
       if (!verifyResponse.isValid) {
+        if (process.env.PAYAI_DEBUG) {
+          console.error(
+            `[@payai/mercantil-agent-sdk] x402 verify rejected: ${verifyResponse.invalidReason ?? verifyResponse.invalidMessage ?? "no reason given"}`,
+          );
+        }
         return {
           status: 402,
           headers: await this.generateChallenge(ctx),

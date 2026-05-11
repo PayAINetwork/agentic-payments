@@ -14,7 +14,12 @@ import { agentPayments } from "@payai/agentic-payments/express";
 const MODE = process.env.MODE ?? "test";
 const PORT = Number(process.env.PORT ?? 4000);
 const PAY_TO_EVM = process.env.PAY_TO_EVM ?? "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-const PAY_TO_SVM = process.env.PAY_TO_SVM ?? "ExamP1eWaLLet1111111111111111111111111111111";
+// Unlike EVM, a Solana payTo address must have an existing USDC Associated
+// Token Account (ATA) or the facilitator's settlement transaction will fail.
+// The default below is a known-good address with ATAs on both devnet and mainnet.
+// Set PAY_TO_SVM to your own address only after running:
+//   spl-token create-account EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v <YOUR_ADDR>
+const PAY_TO_SVM = process.env.PAY_TO_SVM ?? "H32YnqbzL62YkHMSCzfKcLry9yuipwwx1EMztiCSPhjb";
 
 // Fake seller directory for the marketplace route.
 const SELLERS: Record<string, string> = {
@@ -33,11 +38,11 @@ app.use(
     assets: ["USDC", "pathUSD"],
     endpoints: {
       "POST /translate": {
-        price: (ctx) => (ctx.query.tier === "pro" ? "$0.10" : "$0.03"),
+        price: (ctx) => (ctx.query.tier === "pro" ? "$0.02" : "$0.01"),
         description: "Translate - pro tier costs more",
       },
       "GET /marketplace/:seller": {
-        price: "$0.05",
+        price: "$0.01",
         description: "Pay the seller directly",
         payTo: (ctx) => {
           const seller = ctx.path.split("/").pop() ?? "";
