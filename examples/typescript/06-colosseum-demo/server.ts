@@ -1,5 +1,5 @@
 import express from "express";
-import { agentPayments } from "@payai/mercantil-agent-sdk/express";
+import { agentPayments } from "@payai/agentic-payments/express";
 
 const app = express();
 
