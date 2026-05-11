@@ -133,9 +133,24 @@ export const PATH_USD: CustomAssetDef = {
   },
 };
 
+export const CASH: CustomAssetDef = {
+  name: "CASH",
+  addresses: {
+    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": {
+      address: "CASHx9KJUStyftLFWGvEVf59SGeG9sh5FfcnZMVPCASH",
+      decimals: 6, // Solana mainnet — Phantom CASH stablecoin
+    },
+    "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1": {
+      address: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      decimals: 6, // Solana devnet — USDC substitute (CASH has no devnet deployment)
+    },
+  },
+};
+
 export const BUILT_IN_ASSETS: AssetRegistry = {
   USDC,
   USDT,
+  CASH,
   pathUSD: PATH_USD,
 };
 
