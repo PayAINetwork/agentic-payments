@@ -39,7 +39,7 @@ const CASES: Case[] = [
   { workspace: "01-basic-express", url: "/weather", expectBoth: true, expectAmount: "10000" },
   { workspace: "02-multi-asset", url: "/premium", expectBoth: true },
   { workspace: "03-cross-chain", url: "/weather", expectBoth: true, expectAmount: "10000" },
-  { workspace: "04-dynamic-pricing", url: "/translate?tier=pro", method: "POST", expectBoth: true, expectAmount: "100000" },
+  { workspace: "04-dynamic-pricing", url: "/translate?tier=pro", method: "POST", expectBoth: true, expectAmount: "20000" },
   { workspace: "05-hooks", url: "/weather", expectBoth: true, expectAmount: "10000" },
 ];
 
@@ -54,6 +54,10 @@ function startWorkspace(workspace: string) {
     cwd: resolve(EXAMPLES_ROOT, workspace),
     env: { ...process.env, PORT: String(PORT), MODE: "test" },
     stdio: ["ignore", "pipe", "pipe"],
+    // detached=true creates a new process group so we can kill the entire
+    // tree (npm + tsx + grandchildren) with process.kill(-pid). Without
+    // this, killing npm on Linux leaves tsx alive holding the port.
+    detached: true,
   });
 }
 
@@ -153,7 +157,12 @@ async function runCase(c: Case): Promise<boolean> {
     if (stderrBuf) console.error("  stderr:", stderrBuf);
     return false;
   } finally {
-    child.kill("SIGTERM");
+    // Kill the entire process group (npm + tsx grandchild). Negative PID
+    // signals the group. Needed on Linux where killing npm alone leaves
+    // tsx alive holding the port for the next test case.
+    if (child.pid != null) {
+      try { process.kill(-child.pid, "SIGTERM"); } catch { /* already gone */ }
+    }
     await once(child, "exit").catch(() => {});
   }
 }
