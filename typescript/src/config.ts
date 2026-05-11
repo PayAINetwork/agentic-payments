@@ -74,7 +74,9 @@ export async function resolveConfig(
   if (!payTo || isEmptyStaticPayTo(payTo)) {
     throw new ConfigError(
       config.apiKey
-        ? "Managed mode is missing a payment recipient. Connect a wallet in the PayAI dashboard."
+        ? "Managed mode is missing a payment recipient. " +
+            "Either set `payTo` in your SDK config (it takes precedence over the dashboard) " +
+            "or connect a wallet in the PayAI dashboard."
         : "Either apiKey (managed mode) or payTo (manual mode) is required.",
     );
   }

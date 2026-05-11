@@ -88,7 +88,7 @@ describe("resolveConfig — mode detection", () => {
     expect(r.endpoints["GET /weather"].description).toBe("Dashboard weather description");
   });
 
-  it("rejects managed config without a payment recipient", async () => {
+  it("rejects managed config without a payment recipient and points users at both options", async () => {
     await expect(
       resolveConfig(
         {
@@ -99,7 +99,7 @@ describe("resolveConfig — mode detection", () => {
         },
         { managedConfig: { ...managedConfig, payTo: {} } },
       ),
-    ).rejects.toThrow(/Connect a wallet/);
+    ).rejects.toThrow(/`payTo` in your SDK config/);
   });
 });
 
@@ -204,7 +204,7 @@ describe("resolveConfig — x402 config", () => {
     // Default mode is testnet — spot-check a few.
     expect(r.x402?.supportedNetworks).toContain("eip155:84532"); // Base Sepolia
     expect(r.x402?.supportedNetworks).toContain("eip155:80002"); // Polygon Amoy
-    expect(r.x402?.supportedNetworks).toContain("solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z");
+    expect(r.x402?.supportedNetworks).toContain("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1");
     // Tempo testnet is MPP-only — must NOT be in the x402 supported list.
     expect(r.x402?.supportedNetworks).not.toContain("eip155:42431");
   });

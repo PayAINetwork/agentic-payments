@@ -253,6 +253,17 @@ export interface ManagedEndpointConfig {
   updatedAt: string;
 }
 
+/**
+ * Read-only catalog submission status returned by the PayAI portal.
+ *
+ * Catalogs are external directories the portal submits a merchant's API to
+ * (e.g. PayAI's own catalog, x402 Bazaar). These entries are forwarded to
+ * the SDK so application code or admin UIs can surface "where is my API
+ * listed?" status — they do **not** affect payment routing or verification.
+ *
+ * Surfaced via {@link ManagedApiConfig.catalogs} on the resolved managed
+ * config and refreshed whenever the portal pushes a new `config` SSE event.
+ */
 export interface ManagedCatalogStatus {
   catalogName: string;
   status: string;

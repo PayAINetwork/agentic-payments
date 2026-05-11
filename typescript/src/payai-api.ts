@@ -131,6 +131,20 @@ export class PayAIApiClient {
     await this.init(config as AgentPaymentsConfig);
   }
 
+  /**
+   * Long-lived SSE consumer with exponential backoff (1s → doubling → 30s cap).
+   *
+   * Each iteration runs to completion when the server cleanly closes the
+   * stream — common on serverless platforms that cap function duration
+   * (e.g. Vercel's `maxDuration`). On clean close we reset the backoff and
+   * reconnect immediately. On error we wait, backoff, and retry; on a 4xx
+   * (bad credentials, etc.) we surface the error and stop, since retrying
+   * won't help.
+   *
+   * Distinct from `retryRequest`: that helper is for one-shot user-facing
+   * requests where a quick arithmetic retry is enough; here we're babysitting
+   * a connection that should survive transient PayAI API outages.
+   */
   private async runEventLoop(signal: AbortSignal): Promise<void> {
     let reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS;
 
@@ -215,6 +229,19 @@ export class PayAIApiClient {
   }
 }
 
+/**
+ * One-shot HTTP request helper with bounded retries on 5xx / network errors.
+ *
+ * Uses a short arithmetic backoff (250ms → 500ms) — the goal here is to ride
+ * out a momentary blip from the PayAI API on a single user-facing request
+ * (e.g. init/fetchConfig), not to wait out a sustained outage. 4xx responses
+ * are surfaced immediately because they signal a caller bug (bad credentials,
+ * malformed payload) that more retries can't fix.
+ *
+ * The SSE event-loop in `runEventLoop` is a separate concern and uses a
+ * longer exponential backoff (1s → 30s) since it's a long-lived background
+ * connection that should keep trying indefinitely.
+ */
 async function retryRequest(request: () => Promise<Response>): Promise<Response> {
   let lastError: unknown = null;
 
@@ -244,11 +271,16 @@ function createAuthToken(apiKey: ManagedApiKey): string {
 function generateJwt(credentials: ManagedApiKeyCredentials): string {
   const now = Math.floor(Date.now() / 1_000);
   const header = { alg: "EdDSA", typ: "JWT", kid: credentials.keyId };
+  // 5 minute window: long enough to absorb modest clock drift between the
+  // merchant's host and the PayAI API (NTP slop, VM clock skew on bare-metal
+  // hosts, etc.) without giving a stolen token a meaningful replay window.
+  // Each request mints a fresh JWT, so this is a TTL on the in-flight token,
+  // not a session lifetime.
   const payload = {
     sub: credentials.keyId,
     iss: "payai",
     iat: now,
-    exp: now + 120,
+    exp: now + 300,
     jti: crypto.randomBytes(16).toString("hex"),
   };
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
@@ -284,10 +316,17 @@ function buildInitPayload(config: AgentPaymentsConfig, appUrl: string | null): I
 }
 
 /**
- * Resolve the public URL of the merchant's server, in priority order:
+ * Resolve the public URL of the **merchant's own server** (NOT the PayAI API
+ * URL — that's `payaiApiBaseUrl`). The portal's "Test endpoint" probe and
+ * future external uptime checks call back into this URL, so we need a public
+ * address the PayAI infra can reach.
+ *
+ * Resolution order, first non-empty wins:
  *
  *   1. Explicit `config.appUrl` / `PayAIApiClientOptions.appUrl`
- *   2. `PAYAI_APP_URL` env var (manual override, useful for self-hosted deploys)
+ *   2. `PAYAI_APP_URL` env var (manual override — handy for self-hosted
+ *      deploys, or for swapping between `test.merchant.com`,
+ *      `prod.merchant.com`, and an ngrok tunnel without a code change)
  *   3. Auto-detection from common hosting providers
  *
  * Auto-detection covers the platforms most likely to run an Express app:
@@ -349,9 +388,21 @@ function buildEndpointPayload(key: string, endpoint: EndpointConfig): InitEndpoi
   ];
 }
 
+/**
+ * Serialize an endpoint's price for the portal's `Endpoint.dashboardPrice` column.
+ *
+ * String and per-asset record prices serialize losslessly. Function prices have
+ * no meaningful textual form (they're resolved per-request from the
+ * RequestContext), so we send the sentinel `"[dynamic]"`. The portal's
+ * `buildSourceMetadata` keys off whether this value is non-null to decide
+ * `source: "sdk"` vs `source: "dashboard"`; sending `null` for functions would
+ * make the portal record `source: "dashboard"` and let merchants edit a value
+ * the SDK is actually overriding at runtime.
+ */
 function serializePrice(price: EndpointConfig["price"]): string | null {
   if (typeof price === "string") return price;
   if (isStringRecord(price)) return JSON.stringify(price);
+  if (typeof price === "function") return "[dynamic]";
   return null;
 }
 
@@ -368,7 +419,18 @@ function serializeStringValues(values: readonly unknown[] | undefined): string[]
 async function toApiError(response: Response): Promise<PayAIApiError> {
   const text = await response.text().catch(() => "");
   const detail = text ? `: ${text}` : "";
-  return new PayAIApiError(`PayAI API returned ${response.status}${detail}`, response.status);
+  // 401 is almost always one of: stale/wrong PAYAI_KEY_ID/PAYAI_SK, a
+  // revoked key, or — less obviously — host clock drift > 5min that
+  // pushes our short-lived JWT outside its `exp` window. Hint at all
+  // three so the developer doesn't have to dig through docs.
+  const hint =
+    response.status === 401
+      ? " (check PAYAI_KEY_ID / PAYAI_SK, that the key is not revoked, and that this host's clock is in sync — JWTs expire after 5 minutes)"
+      : "";
+  return new PayAIApiError(
+    `PayAI API returned ${response.status}${detail}${hint}`,
+    response.status,
+  );
 }
 
 function isClientApiError(error: unknown): error is PayAIApiError {

@@ -109,7 +109,44 @@ describe("PayAIApiClient", () => {
     expect(payload.iss).toBe("payai");
     expect(typeof payload.exp).toBe("number");
     expect(typeof payload.iat).toBe("number");
-    expect(Number(payload.exp) - Number(payload.iat)).toBe(120);
+    expect(Number(payload.exp) - Number(payload.iat)).toBe(300);
+  });
+
+  it("includes a clock-sync hint in 401 errors so users know to check their host clock", async () => {
+    const { fetchImpl } = createFetchMock([jsonResponse({ error: "unauthorized" }, 401)]);
+    const client = new PayAIApiClient({
+      apiKey: createCredentials(),
+      baseUrl: "https://merchant.example.test",
+      fetchImpl,
+    });
+
+    await expect(client.init(agentConfig)).rejects.toThrow(/clock|JWT/i);
+  });
+
+  it("serializes function-typed prices to '[dynamic]' so the portal records source: sdk", async () => {
+    const { fetchImpl, calls } = createFetchMock([jsonResponse(managedConfig())]);
+    const client = new PayAIApiClient({
+      apiKey: createCredentials(),
+      baseUrl: "https://merchant.example.test",
+      fetchImpl,
+    });
+
+    await client.init({
+      apiKey: createCredentials(),
+      endpoints: {
+        "GET /weather": {
+          // Function prices have no static text — the portal needs the
+          // sentinel so it doesn't mis-attribute the field as dashboard-owned.
+          price: () => "$0.01",
+        },
+      },
+    });
+
+    const initBody = JSON.parse(String(calls[0].init?.body)) as {
+      endpoints: { route: string; price: string | null }[];
+    };
+    expect(initBody.endpoints).toHaveLength(1);
+    expect(initBody.endpoints[0].price).toBe("[dynamic]");
   });
 
   it("parses CRLF, multi-event, comments, and partial SSE buffers", () => {

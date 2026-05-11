@@ -21,6 +21,12 @@ export interface AgentPaymentsHandler extends RequestHandler {
    * See {@link AgentPayments.registerEndpoints}.
    */
   registerEndpoints: (endpoints: AgentPaymentsConfig["endpoints"]) => Promise<void>;
+  /**
+   * Stop the managed-mode SSE event loop. Wire this into your server's
+   * SIGTERM handler so the SDK doesn't leak the long-lived connection on
+   * graceful shutdown. See {@link AgentPayments.shutdown}.
+   */
+  shutdown: () => void;
 }
 
 /**
@@ -70,6 +76,7 @@ export function agentPayments(config: AgentPaymentsConfig): AgentPaymentsHandler
   //   await handler.registerEndpoints(newRoutes);
   handler.agentPayments = ap;
   handler.registerEndpoints = (endpoints) => ap.registerEndpoints(endpoints);
+  handler.shutdown = () => ap.shutdown();
 
   return handler;
 }

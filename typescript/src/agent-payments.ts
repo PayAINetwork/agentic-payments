@@ -65,17 +65,31 @@ export class AgentPayments {
   private managedClient: PayAIApiClient | null = null;
 
   /**
-   * @param config - User-facing configuration. Validated + normalized lazily
-   *   on the first `processRequest` call so construction itself never throws,
-   *   never touches the filesystem, and never blocks on network work (e.g.
-   *   the managed-mode API client, once implemented).
+   * Construction is intentionally cheap and never throws. Validation and
+   * normalization happen lazily on the first `processRequest`.
+   *
+   * **Manual mode** (`config.apiKey` unset): construction does no I/O at all.
+   * Filesystem touches (auto-generating `.payai/mpp-secret`) and adapter
+   * setup are deferred until the first request goes through `ensureInitialized`.
+   *
+   * **Managed mode** (`config.apiKey` set): construction kicks off
+   * `ensureInitialized` in the background to warm the SDK config (one
+   * `POST /api/v1/sdk/init` to PayAI, plus an MPP secret resolution that
+   * may read or write `.payai/mpp-secret`). The first incoming request
+   * awaits the same promise, so init failures don't surface here — they
+   * surface at the first protected request that needs the resolved config.
+   * On startup-time init failure we log a warning and let the next request
+   * retry; permanent failures (bad credentials, etc.) will be reported then.
+   *
+   * @param config - User-facing configuration. See {@link AgentPaymentsConfig}.
    */
   constructor(config: AgentPaymentsConfig) {
     this.config = config;
     if (config.apiKey) {
       void this.ensureInitialized().catch((error) => {
         console.warn(
-          "[@payai/agentic-payments] Managed mode initialization failed; the next protected request will retry.",
+          "[@payai/agentic-payments] Managed mode init failed - the SDK will retry on the next incoming request. " +
+            "Check PAYAI_KEY_ID / PAYAI_SK and network connectivity to the PayAI API.",
           error,
         );
       });
@@ -141,13 +155,21 @@ export class AgentPayments {
    * Only effective in managed mode (when `apiKey` is set). In manual mode
    * this is a no-op, since there is no dashboard to push to.
    *
+   * Unlike the constructor, this method **awaits and throws** on failure —
+   * wrap it in try/catch (or attach a `.catch`) at the call site so a
+   * dashboard hiccup doesn't take down a periodic refresh task.
+   *
    * @example
    * const handler = agentPayments({ apiKey, endpoints: initial });
    * app.use(handler);
    *
    * setInterval(async () => {
    *   const endpoints = await loadEndpointsFromDb();
-   *   await handler.registerEndpoints(endpoints);
+   *   try {
+   *     await handler.registerEndpoints(endpoints);
+   *   } catch (err) {
+   *     console.error("registerEndpoints failed", err);
+   *   }
    * }, 60_000);
    */
   async registerEndpoints(endpoints: AgentPaymentsConfig["endpoints"]): Promise<void> {
@@ -156,6 +178,26 @@ export class AgentPayments {
     if (this.managedClient) {
       await this.managedClient.registerEndpoints(this.config);
     }
+  }
+
+  /**
+   * Stop the managed-mode SSE event loop and release the underlying API
+   * client. Idempotent and safe to call from `process.on("SIGTERM", …)` or
+   * a Node graceful-shutdown handler.
+   *
+   * In manual mode this is a no-op (no managed client was ever created).
+   * In managed mode it aborts the long-running `/api/v1/sdk/events` fetch
+   * so the SDK doesn't leak an SSE connection across server restarts. The
+   * AgentPayments instance keeps working for in-flight requests; the next
+   * `processRequest` call after `shutdown()` will re-init (and reconnect
+   * the event loop) lazily.
+   *
+   * @example
+   * const handler = agentPayments({ apiKey, endpoints });
+   * process.on("SIGTERM", () => handler.shutdown());
+   */
+  shutdown(): void {
+    this.managedClient?.stopEvents();
   }
 
   /**
