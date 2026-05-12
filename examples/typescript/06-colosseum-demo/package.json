@@ -8,7 +8,7 @@
     "start": "tsx --env-file-if-exists=.env server.ts"
   },
   "dependencies": {
-    "@payai/mercantil-agent-sdk": "file:../../../typescript",
+    "@payai/agentic-payments": "file:../../../typescript",
     "express": "^5.0.0"
   },
   "devDependencies": {

@@ -84,7 +84,7 @@ export function createX402Adapter(
       })
       .catch((err: unknown) => {
         if (process.env.PAYAI_DEBUG) {
-          console.error("[@payai/mercantil-agent-sdk] getSupported failed:", err);
+          console.error("[@payai/agentic-payments] getSupported failed:", err);
         }
         // Reset the cache so a retry isn't stuck on a stale failure for the
         // process lifetime.
@@ -206,7 +206,7 @@ export function createX402Adapter(
       if (!verifyResponse.isValid) {
         if (process.env.PAYAI_DEBUG) {
           console.error(
-            `[@payai/mercantil-agent-sdk] x402 verify rejected: ${verifyResponse.invalidReason ?? verifyResponse.invalidMessage ?? "no reason given"}`,
+            `[@payai/agentic-payments] x402 verify rejected: ${verifyResponse.invalidReason ?? verifyResponse.invalidMessage ?? "no reason given"}`,
           );
         }
         return {
