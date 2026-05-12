@@ -9,12 +9,11 @@ The PayAI Agent Payments SDK is a dual-protocol middleware that lets your HTTP e
 This is the monorepo hosting all language SDKs and related tooling. **TypeScript is the only language that ships today** — Python and Go scaffolding exists but is empty.
 
 ```
-agent-payments/
+agentic-payments/
 ├── typescript/          ← @payai/agentic-payments · Express middleware (shipping)
-├── examples/typescript/ ← runnable example servers + clients + smoke tests
+├── examples/typescript/ ← runnable example servers + payment clients + smoke tests
 ├── python/              ← placeholder
 ├── go/                  ← placeholder
-├── e2e/                 ← placeholder for cross-language E2E tests
 └── README.md            ← this file
 ```
 
@@ -52,7 +51,7 @@ Unauthenticated requests get a `402 Payment Required` with **both** protocol cha
 
 ## Try it end-to-end
 
-The [`examples/typescript/`](examples/typescript/) directory is an npm workspace with six copy-pasteable example servers and a smoke-test harness that spins each one up and asserts the 402 shape.
+The [`examples/typescript/`](examples/typescript/) directory is an npm workspace with copy-pasteable example servers and a smoke-test harness that spins each one up and asserts the 402 shape.
 
 ```bash
 cd examples/typescript
@@ -60,7 +59,7 @@ npm install
 npm start --workspace 01-basic-express   # starts on :4000
 ```
 
-Each example folder is a full, self-contained project — clone any one out of this repo and `npm install && npm start` works standalone.
+Each example folder is a full, self-contained project — clone any one out of this repo and `npm install && npm start` works standalone. Copy `.env.example` to `.env` and fill in your keys.
 
 **Decode the 402 challenges:**
 
@@ -71,6 +70,23 @@ cd examples/typescript/01-basic-express
 
 The script walks through the 402 in four steps, decoding the base64 `PAYMENT-REQUIRED` header and the base64url-wrapped MPP `request=` parameter so you can read exactly which (asset × network × amount) combinations the server is accepting.
 
+**Make a real payment against a running server:**
+
+```bash
+cd examples/typescript
+
+# x402 — signs and settles on EVM or Solana (set EVM_PRIVATE_KEY or SVM_PRIVATE_KEY)
+NETWORK=solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1 SVM_PRIVATE_KEY=<base58> npm run pay:x402
+
+# MPP — pays on Tempo testnet (set EVM_PRIVATE_KEY)
+EVM_PRIVATE_KEY=0x... npm run pay:mpp
+
+# No signing — just verifies the server returns a well-formed 402
+npm run probe
+```
+
+See [`examples/typescript/.env.example`](examples/typescript/.env.example) for all supported env vars.
+
 ## Examples
 
 | # | Demonstrates |
@@ -80,12 +96,13 @@ The script walks through the 402 in four steps, decoding the base64 `PAYMENT-REQ
 | [03 · cross-chain](examples/typescript/03-cross-chain) | Explicit CAIP-2 `payTo` when you need per-chain control the shorthand can't express |
 | [04 · dynamic-pricing](examples/typescript/04-dynamic-pricing) | `price(ctx)` and `payTo(ctx)` functions (tiering, marketplace per-seller recipients) |
 | [05 · hooks](examples/typescript/05-hooks) | All four lifecycle hooks: `onRequest`, `onPaymentVerified`, `onPaymentSettled`, `onPaymentFailed` |
+| [06 · colosseum-demo](examples/typescript/06-colosseum-demo) | CASH + USDC + pathUSD across Solana and all EVM chains; hooks log each payment to stdout |
 | [99 · validation-errors](examples/typescript/99-validation-errors) | Shows how a config-time `ConfigError` surfaces (non-ASCII description with MPP enabled) |
 
 ## Feature highlights
 
 - **Dual protocol in one middleware** — no separate code paths for x402 vs. MPP; the SDK picks the right adapter based on the client's request headers.
-- **Sixteen EVM chains + Solana by default** — writing `assets: ["USDC"]` automatically covers Base, Avalanche, Polygon, Sei, IoTeX, Peaq, XLayer, Skale, KiteAI (and their testnets) with correct per-chain USDC contract, decimals, and EIP-712 domain. Users never look up a stablecoin address.
+- **Built-in asset registry** — `assets: ["USDC"]` automatically covers sixteen EVM chains (Base, Avalanche, Polygon, Sei, IoTeX, Peaq, XLayer, Skale, KiteAI and their testnets) plus Solana mainnet and devnet with correct per-chain contract addresses, decimals, and EIP-712 domains. `assets: ["CASH"]` resolves Phantom's CASH stablecoin on Solana. Users never look up a token address.
 - **Per-family `payTo` shorthand** — write `payTo: { evm, solana }` and the SDK spreads each address across every supported network in its family, using mainnet or testnet chains based on the `live` flag.
 - **Safe-by-default `live` flag** — defaults to `false` (testnet, no real funds). Real payments require explicit `live: true` opt-in, matching Stripe's `livemode` convention.
 - **Dynamic price and payTo** — both can be functions of the request, so marketplaces, tiered APIs, and multi-tenant deployments work out of the box.

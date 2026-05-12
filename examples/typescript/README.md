@@ -11,8 +11,9 @@ examples/typescript/
 ├── 03-cross-chain/
 ├── 04-dynamic-pricing/
 ├── 05-hooks/
+├── 06-colosseum-demo/
 ├── 99-validation-errors/   ← expected-failure example for config validation
-├── shared/                 ← tooling: smoke test + sample clients (internal)
+├── shared/                 ← tooling: smoke test + payment clients (internal)
 └── package.json            ← workspace root
 ```
 
@@ -47,14 +48,15 @@ MODE=live npm start
 
 ## Examples
 
-| #                                                | What it demonstrates                                              |
-| ------------------------------------------------ | ----------------------------------------------------------------- |
-| [01 · basic-express](./01-basic-express)         | Minimum config: one EVM address, one endpoint, both protocols     |
-| [02 · multi-asset](./02-multi-asset)             | Uniform pricing across tokens, plus per-asset price records       |
-| [03 · cross-chain](./03-cross-chain)             | Explicit CAIP-2 `payTo` covering Base + Tempo + Solana            |
-| [04 · dynamic-pricing](./04-dynamic-pricing)     | Dynamic `price` and `payTo` functions (tiering, marketplaces)     |
-| [05 · hooks](./05-hooks)                         | All four lifecycle hooks (`onRequest`, `onPaymentVerified`, etc.) |
-| [99 · validation-errors](./99-validation-errors) | Surfaces a config-time `ConfigError` on non-ASCII descriptions    |
+| # | What it demonstrates |
+|---|----------------------|
+| [01 · basic-express](./01-basic-express) | Minimum config: one EVM address, one endpoint, both protocols |
+| [02 · multi-asset](./02-multi-asset) | Uniform pricing across tokens, plus per-asset price records |
+| [03 · cross-chain](./03-cross-chain) | Explicit CAIP-2 `payTo` covering Base + Tempo + Solana |
+| [04 · dynamic-pricing](./04-dynamic-pricing) | Dynamic `price` and `payTo` functions (tiering, marketplaces) |
+| [05 · hooks](./05-hooks) | All four lifecycle hooks (`onRequest`, `onPaymentVerified`, etc.) |
+| [06 · colosseum-demo](./06-colosseum-demo) | CASH + USDC + pathUSD across Solana and all EVM chains; hooks log each payment to stdout |
+| [99 · validation-errors](./99-validation-errors) | Surfaces a config-time `ConfigError` on non-ASCII descriptions |
 
 ## Clients (in `shared/clients/`)
 
@@ -64,11 +66,12 @@ Defaults to `http://localhost:4000/weather`. Override with `URL=...`.
 # No signing — verifies the server returns a correct 402.
 npm run probe
 
-# Pay an MPP challenge on Tempo (requires a funded testnet account).
-PRIVATE_KEY=0x... npm run pay:mpp
+# x402 — signs and settles on EVM or Solana.
+EVM_PRIVATE_KEY=0x... npm run pay:x402                              # picks first available network
+NETWORK=solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1 SVM_PRIVATE_KEY=<base58> npm run pay:x402
 
-# x402 client is a decode-and-describe stub until scheme packages are wired up.
-npm run pay:x402
+# MPP — pays on Tempo (requires a funded account with pathUSD).
+EVM_PRIVATE_KEY=0x... npm run pay:mpp
 ```
 
 ## Publishing note
