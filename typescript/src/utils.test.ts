@@ -214,7 +214,8 @@ describe("expandPayTo", () => {
     expect(out["eip155:84532"]).toBe(EVM); // Base Sepolia
     expect(out["eip155:80002"]).toBe(EVM); // Polygon Amoy
     expect(out["eip155:42431"]).toBe(EVM); // Tempo testnet
-    // Solana side covers Solana testnet
+    // Solana side covers Solana devnet (the SDK's "testnet" SVM target —
+    // see assets.ts SVM_NETWORKS for why devnet, not Solana's own testnet).
     expect(out["solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"]).toBe(SVM);
     // Values correctly segregated by family
     const evmKeys = Object.keys(out).filter((k) => k.startsWith("eip155:"));

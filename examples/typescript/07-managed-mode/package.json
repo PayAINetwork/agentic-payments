@@ -1,9 +1,9 @@
 {
-  "name": "example-06-colosseum-demo",
+  "name": "example-07-managed-mode",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Colosseum demo — CASH + USDC + MPP across Solana and EVM in one middleware call.",
+  "description": "Managed-mode server: config (payTo, prices, live flag) fetched from the PayAI portal.",
   "scripts": {
     "start": "tsx --env-file-if-exists=.env server.ts"
   },

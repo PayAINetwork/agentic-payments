@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveConfig } from "./config.js";
 import { ConfigError } from "./errors.js";
-import type { AgentPaymentsConfig } from "./types.js";
+import type { AgentPaymentsConfig, ManagedApiConfig } from "./types.js";
 
 const EVM = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 const SVM = "ExamP1eWaLLet1111111111111111111111111111111";
@@ -25,6 +25,31 @@ const baseEndpoints = {
   "GET /weather": { price: "$0.01", description: "Current weather" },
 };
 
+const managedConfig: ManagedApiConfig = {
+  live: true,
+  facilitatorUrl: "https://merchant-facilitator.example.com",
+  payTo: {
+    "eip155:8453": EVM,
+  },
+  networks: ["eip155:8453"],
+  tokens: ["USDC"],
+  protocols: ["x402"],
+  endpoints: [
+    {
+      id: "endpoint_1",
+      method: "GET",
+      route: "/weather",
+      dashboardPrice: "$0.02",
+      dashboardDescription: "Dashboard weather description",
+      sourceMetadata: {},
+      enabled: true,
+      updatedAt: "2026-05-05T00:00:00.000Z",
+    },
+  ],
+  catalogs: [],
+  generatedAt: "2026-05-05T00:00:00.000Z",
+};
+
 describe("resolveConfig — mode detection", () => {
   it("throws if neither apiKey nor payTo is given", async () => {
     await expect(
@@ -32,10 +57,49 @@ describe("resolveConfig — mode detection", () => {
     ).rejects.toThrow(ConfigError);
   });
 
-  it("throws if apiKey is set (managed mode not yet implemented)", async () => {
+  it("throws if apiKey is set without managed API config", async () => {
     await expect(resolveConfig({ apiKey: "pk_test", endpoints: baseEndpoints })).rejects.toThrow(
-      /Managed mode.*not yet implemented/,
+      /PayAIApiClient\.init/,
     );
+  });
+
+  it("rejects live when apiKey is set because the dashboard owns live mode", async () => {
+    await expect(
+      resolveConfig({ apiKey: "pk_test", live: true, endpoints: baseEndpoints }),
+    ).rejects.toThrow(/dashboard/);
+  });
+
+  it("uses managed API config as the dashboard fill layer", async () => {
+    const r = await resolveConfig(
+      {
+        apiKey: "pk_test",
+        endpoints: {
+          "GET /weather": {},
+        },
+      },
+      { managedConfig },
+    );
+
+    expect(r.live).toBe(true);
+    expect(r.payTo).toEqual(managedConfig.payTo);
+    expect(r.networks).toEqual(["eip155:8453"]);
+    expect(r.x402?.facilitatorUrl).toBe("https://merchant-facilitator.example.com");
+    expect(r.endpoints["GET /weather"].price).toBe("$0.02");
+    expect(r.endpoints["GET /weather"].description).toBe("Dashboard weather description");
+  });
+
+  it("rejects managed config without a payment recipient and points users at both options", async () => {
+    await expect(
+      resolveConfig(
+        {
+          apiKey: "pk_test",
+          endpoints: {
+            "GET /weather": {},
+          },
+        },
+        { managedConfig: { ...managedConfig, payTo: {} } },
+      ),
+    ).rejects.toThrow(/`payTo` in your SDK config/);
   });
 });
 

@@ -98,9 +98,13 @@ export const USDC: CustomAssetDef = {
       address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       decimals: 6, // Solana mainnet-beta
     },
+    // Solana devnet — devnet (not testnet) is where the canonical USDC test
+    // mint lives and where x402 facilitators target SVM testing. Solana's
+    // own "testnet" cluster has no widely-used USDC deployment, so we point
+    // the SDK's `live: false` SVM network at devnet.
     "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1": {
       address: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-      decimals: 6, // Solana devnet
+      decimals: 6,
     },
   },
 };
@@ -202,6 +206,9 @@ export const EVM_NETWORKS = {
 /** SVM networks PayAI's x402 facilitator can settle on. */
 export const SVM_NETWORKS = {
   mainnet: ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"],
+  // `testnet` here means "the SDK's test environment". On Solana that maps to
+  // devnet — see the comment in `USDC.addresses` for why we don't use
+  // Solana's own testnet cluster.
   testnet: ["solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"],
 } as const;
 

@@ -1,5 +1,5 @@
 /**
- * @payai/mercantil-agent-sdk — Core type definitions
+ * @payai/agentic-payments — Core type definitions
  *
  * See PLAN.md at repo root for full design rationale.
  */
@@ -142,9 +142,8 @@ export type PayTo = PayToValue | ((ctx: RequestContext) => PayToValue | Promise<
 // --- Endpoint configuration ---
 
 /**
- * Per-endpoint configuration. Every endpoint MUST set `price`; everything else
- * is optional and inherits from the top-level {@link AgentPaymentsConfig}
- * when omitted.
+ * Per-endpoint configuration. Manual mode endpoints must set `price`; managed
+ * mode endpoints may omit it when the dashboard supplies a fill.
  *
  * ## Override priority
  *
@@ -152,7 +151,7 @@ export type PayTo = PayToValue | ((ctx: RequestContext) => PayToValue | Promise<
  *
  * | Field | Resolution (first non-nullish wins) |
  * |-------|------------------------------------|
- * | `price` | required on every endpoint; no root-level default |
+ * | `price` | `endpoint.price` → dashboard fill in managed mode |
  * | `description` | `endpoint.description` only |
  * | `assets` | `price` record keys (if `price` is a record) → `endpoint.assets` → `config.assets` → `["USDC"]` |
  * | `payTo` | `endpoint.payTo` → `config.payTo` |
@@ -196,7 +195,7 @@ export interface EndpointConfig {
    * - `(ctx) => …` — resolved per-request from the `RequestContext`
    *   (useful for tiering, user-specific pricing, etc).
    */
-  price: Price;
+  price?: Price;
   /**
    * Short human-readable string describing what the client is paying for.
    * Surfaced in the 402 challenge (x402 `resource.description` and, for
@@ -234,11 +233,84 @@ export interface EndpointConfig {
  */
 export type EndpointMap = Record<string, EndpointConfig>;
 
+// --- Managed mode API ---
+
+export interface ManagedApiKeyCredentials {
+  keyId: string;
+  secret: string;
+}
+
+export type ManagedApiKey = string | ManagedApiKeyCredentials;
+
+export interface ManagedEndpointConfig {
+  id: string;
+  method: string;
+  route: string;
+  dashboardPrice: string | null;
+  dashboardDescription: string | null;
+  sourceMetadata: unknown;
+  enabled: boolean;
+  updatedAt: string;
+}
+
+/**
+ * Read-only catalog submission status returned by the PayAI portal.
+ *
+ * Catalogs are external directories the portal submits a merchant's API to
+ * (e.g. PayAI's own catalog, x402 Bazaar). These entries are forwarded to
+ * the SDK so application code or admin UIs can surface "where is my API
+ * listed?" status — they do **not** affect payment routing or verification.
+ *
+ * Surfaced via {@link ManagedApiConfig.catalogs} on the resolved managed
+ * config and refreshed whenever the portal pushes a new `config` SSE event.
+ */
+export interface ManagedCatalogStatus {
+  catalogName: string;
+  status: string;
+  listingUrl: string | null;
+  submittedAt: string;
+  liveAt: string | null;
+}
+
+export interface ManagedApiConfig {
+  live: boolean;
+  facilitatorUrl: string;
+  payTo: Record<string, string>;
+  networks: string[];
+  tokens: string[];
+  protocols: Protocol[];
+  endpoints: ManagedEndpointConfig[];
+  catalogs: ManagedCatalogStatus[];
+  generatedAt: string;
+}
+
 // --- Main config ---
 
 export interface AgentPaymentsConfig {
   /** PayAI API key. Enables managed mode. */
-  apiKey?: string;
+  apiKey?: ManagedApiKey;
+
+  /**
+   * Override the PayAI merchant API base URL in managed mode.
+   * Useful for local portal development; PAYAI_API_URL remains the env fallback.
+   */
+  payaiApiBaseUrl?: string;
+
+  /**
+   * Public URL where this server is reachable. Reported to the dashboard
+   * on init() and used for the "Test endpoint" probe.
+   *
+   * Resolution order (first non-empty wins):
+   *   1. config.appUrl (this field)
+   *   2. SERVER_URL env var
+   *   3. Auto-detected from common hosts (Vercel: VERCEL_URL,
+   *      Fly: FLY_APP_NAME, Railway: RAILWAY_PUBLIC_DOMAIN, Render: RENDER_EXTERNAL_URL)
+   *
+   * Leave undefined in development unless you've set up a tunnel; the
+   * onboarding "Test endpoint" UI lets users override the URL per-browser
+   * without restarting the SDK.
+   */
+  appUrl?: string;
 
   /**
    * Accept real payments. When `true`, all defaults target mainnet:
@@ -307,6 +379,8 @@ export interface ResolvedConfig {
   networks: string[];
   /** Enabled protocols. `mpp` is only enabled when a Tempo network is present in `networks`. */
   protocols: Protocol[];
+  /** Dashboard-controlled in managed mode; top-level `live` in manual mode. */
+  live: boolean;
   /**
    * Merged asset registry — built-in assets (USDC, USDT, pathUSD) combined
    * with any `CustomAssetDef` entries the user registered via `config.assets`.

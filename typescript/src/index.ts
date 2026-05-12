@@ -1,4 +1,7 @@
 export { AgentPayments } from "./agent-payments.js";
+export { resolveConfig } from "./config.js";
+export { ConfigError, PayAIApiError } from "./errors.js";
+export { PayAIApiClient } from "./payai-api.js";
 export type {
   AgentPaymentsConfig,
   Asset,
@@ -7,6 +10,11 @@ export type {
   EndpointMap,
   HookContext,
   Hooks,
+  ManagedApiConfig,
+  ManagedApiKey,
+  ManagedApiKeyCredentials,
+  ManagedCatalogStatus,
+  ManagedEndpointConfig,
   PaymentMetadata,
   PayTo,
   PayToShorthand,

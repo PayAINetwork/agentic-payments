@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Runnable examples for @payai/mercantil-agent-sdk. Each example directory is a standalone workspace — copy it out and it runs.",
+  "description": "Runnable examples for @payai/agentic-payments. Each example directory is a standalone workspace — copy it out and it runs.",
   "workspaces": [
     "01-basic-express",
     "02-multi-asset",
@@ -11,6 +11,7 @@
     "04-dynamic-pricing",
     "05-hooks",
     "06-colosseum-demo",
+    "07-managed-mode",
     "99-validation-errors",
     "shared"
   ],
