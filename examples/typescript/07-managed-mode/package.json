@@ -1,0 +1,20 @@
+{
+  "name": "example-07-managed-mode",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Managed-mode server: config (payTo, prices, live flag) fetched from the PayAI portal.",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env server.ts"
+  },
+  "dependencies": {
+    "@payai/agentic-payments": "file:../../../typescript",
+    "express": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

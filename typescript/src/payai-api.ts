@@ -20,7 +20,7 @@ export interface PayAIApiClientOptions {
   /**
    * Public URL where the merchant's server is reachable. Forwarded to the
    * portal on init() so the onboarding UI can probe the endpoint. When unset,
-   * `buildInitPayload` falls back to PAYAI_APP_URL and a handful of well-known
+   * `buildInitPayload` falls back to SERVER_URL and a handful of well-known
    * platform env vars (see resolveAppUrl).
    */
   appUrl?: string;
@@ -324,7 +324,7 @@ function buildInitPayload(config: AgentPaymentsConfig, appUrl: string | null): I
  * Resolution order, first non-empty wins:
  *
  *   1. Explicit `config.appUrl` / `PayAIApiClientOptions.appUrl`
- *   2. `PAYAI_APP_URL` env var (manual override — handy for self-hosted
+ *   2. `SERVER_URL` env var (manual override — handy for self-hosted
  *      deploys, or for swapping between `test.merchant.com`,
  *      `prod.merchant.com`, and an ngrok tunnel without a code change)
  *   3. Auto-detection from common hosting providers
@@ -339,7 +339,7 @@ function buildInitPayload(config: AgentPaymentsConfig, appUrl: string | null): I
  * the user to fill it in via the editable Server URL field on /onboarding/endpoints.
  */
 function resolveAppUrl(explicit?: string): string | null {
-  const candidate = firstNonEmpty([explicit, process.env.PAYAI_APP_URL, detectHostedAppUrl()]);
+  const candidate = firstNonEmpty([explicit, process.env.SERVER_URL, detectHostedAppUrl()]);
   return candidate ? stripTrailingSlash(candidate) : null;
 }
 

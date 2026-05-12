@@ -302,7 +302,7 @@ export interface AgentPaymentsConfig {
    *
    * Resolution order (first non-empty wins):
    *   1. config.appUrl (this field)
-   *   2. PAYAI_APP_URL env var
+   *   2. SERVER_URL env var
    *   3. Auto-detected from common hosts (Vercel: VERCEL_URL,
    *      Fly: FLY_APP_NAME, Railway: RAILWAY_PUBLIC_DOMAIN, Render: RENDER_EXTERNAL_URL)
    *
