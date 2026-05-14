@@ -1,6 +1,6 @@
 {
   "name": "@payai/agentic-payments",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Accept x402 and MPP agentic payments through a single integration",
   "type": "module",
   "main": "./dist/index.js",
