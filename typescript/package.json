@@ -30,7 +30,8 @@
     "publint": "publint",
     "attw": "attw --pack . --ignore-rules cjs-resolves-to-esm no-resolution",
     "size": "size-limit",
-    "check": "npm run typecheck && npm run lint && npm run publint && npm run attw && npm run size"
+    "check": "npm run typecheck && npm run lint && npm run publint && npm run attw && npm run size",
+    "prepublishOnly": "npm run build && npm run check"
   },
   "dependencies": {
     "@x402/core": "^2.7.0",
