@@ -1,4 +1,4 @@
-# @payai/mercantil-agent-sdk — TypeScript Examples
+# @payai/agentic-payments — TypeScript Examples
 
 Each example directory is a **standalone npm package**. Pick one, copy it out of this repo, run `npm install && npm start`, and it just works. This directory also serves as an npm-workspaces monorepo so a single `npm install` at the root wires all examples at once for development.
 
@@ -76,4 +76,4 @@ EVM_PRIVATE_KEY=0x... npm run pay:mpp
 
 ## Publishing note
 
-Each example's `package.json` pins `"@payai/mercantil-agent-sdk": "file:../../../typescript"` so the workspace links to local source during development. Before publishing this directory (or referencing it externally), those file deps will need to be swapped for the published version.
+Each example's `package.json` pins `"@payai/agentic-payments": "file:../../../typescript"` so the workspace links to local source during development. Before publishing this directory (or referencing it externally), those file deps will need to be swapped for the published version.

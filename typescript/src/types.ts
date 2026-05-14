@@ -1,5 +1,5 @@
 /**
- * @payai/mercantil-agent-sdk — Core type definitions
+ * @payai/agentic-payments — Core type definitions
  *
  * See PLAN.md at repo root for full design rationale.
  */

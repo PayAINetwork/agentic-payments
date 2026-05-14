@@ -10,7 +10,7 @@ This is the monorepo hosting all language SDKs and related tooling. **TypeScript
 
 ```
 agentic-payments/
-├── typescript/          ← @payai/mercantil-agent-sdk · Express middleware (shipping)
+├── typescript/          ← @payai/agentic-payments · Express middleware (shipping)
 ├── examples/typescript/ ← runnable example servers + payment clients + smoke tests
 ├── python/              ← placeholder
 ├── go/                  ← placeholder
@@ -21,7 +21,7 @@ agentic-payments/
 
 ```ts
 import express from "express";
-import { agentPayments } from "@payai/mercantil-agent-sdk/express";
+import { agentPayments } from "@payai/agentic-payments/express";
 
 const app = express();
 

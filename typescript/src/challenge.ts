@@ -49,7 +49,7 @@ export async function generateChallengeHeaders(
         }
       }
     } else if (process.env.PAYAI_DEBUG) {
-      console.error("[@payai/mercantil-agent-sdk] challenge adapter failed:", result.reason);
+      console.error("[@payai/agentic-payments] challenge adapter failed:", result.reason);
     }
     // Rejected adapters are otherwise silently skipped — the other protocol still works
   }
