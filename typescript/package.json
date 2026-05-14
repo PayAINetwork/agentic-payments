@@ -1,6 +1,6 @@
 {
   "name": "@payai/agentic-payments",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Accept x402 and MPP agentic payments through a single integration",
   "type": "module",
   "main": "./dist/index.js",
@@ -63,6 +63,10 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PayAINetwork/agentic-payments"
   },
   "license": "MIT",
   "size-limit": [
