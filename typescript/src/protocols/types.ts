@@ -41,8 +41,8 @@ export interface ProtocolAdapter {
 
   /**
    * Verify a payment from the client.
-   * Returns ProcessResult200 on success (with settleAndReceipt for deferred settlement),
-   * or ProcessResult402 if verification fails.
+   * Returns ProcessResult200 on success (with finalize / settleAndReceipt for
+   * deferred settlement), or ProcessResult402 if verification fails.
    */
   verifyAndSettle(
     headerValue: string,

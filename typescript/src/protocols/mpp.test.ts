@@ -243,6 +243,41 @@ describe("MPP adapter — entry selection", () => {
   });
 });
 
+describe("MPP adapter — finalization", () => {
+  it("finalize returns Payment-Receipt without another compose call", async () => {
+    const withReceipt = vi.fn((response: Response) => {
+      response.headers.set("Payment-Receipt", "mpp-receipt");
+      return response;
+    });
+    const mppx = {
+      tempo: { charge: vi.fn(() => "tempo-charge-handler") },
+      compose: vi.fn(() => async () => ({
+        status: 200,
+        withReceipt,
+      })),
+    };
+    const adapter = createMppAdapter({
+      secretKey: "x".repeat(64),
+      realm: "test",
+      mppx,
+    });
+
+    const result = await adapter.verifyAndSettle("verified-credential", buildContext());
+    if (result.status !== 200) throw new Error("Expected verified payment");
+
+    const finalized = await result.finalize();
+    const response = await result.settleAndReceipt(new Response("ok"));
+
+    expect(finalized).toEqual({
+      headers: { "Payment-Receipt": "mpp-receipt" },
+      settled: true,
+    });
+    expect(response.headers.get("Payment-Receipt")).toBe("mpp-receipt");
+    expect(mppx.compose).toHaveBeenCalledTimes(1);
+    expect(withReceipt).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("MPP adapter — WWW-Authenticate multi-challenge", () => {
   /**
    * mppx internally `append`s one `WWW-Authenticate` per method handler,

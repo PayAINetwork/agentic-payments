@@ -106,6 +106,7 @@ See [`examples/typescript/.env.example`](examples/typescript/.env.example) for a
 - **Per-family `payTo` shorthand** — write `payTo: { evm, solana }` and the SDK spreads each address across every supported network in its family, using mainnet or testnet chains based on the `live` flag.
 - **Safe-by-default `live` flag** — defaults to `false` (testnet, no real funds). Real payments require explicit `live: true` opt-in, matching Stripe's `livemode` convention.
 - **Dynamic price and payTo** — both can be functions of the request, so marketplaces, tiered APIs, and multi-tenant deployments work out of the box.
+- **Response-agnostic finalization** — direct integrations can call `result.finalize()` to get the protocol receipt headers (`PAYMENT-RESPONSE` or `Payment-Receipt`) without constructing a framework response object.
 - **Lifecycle hooks** — `onRequest` can grant free access (internal keys, auth tokens), `onPaymentVerified` can reject after verification, `onPaymentSettled`/`onPaymentFailed` give you observability.
 - **Response buffering for x402** — the middleware buffers `writeHead`/`write`/`end`/`flushHeaders` while the handler runs, so settlement happens only after a successful response (≥400s skip settlement). Same pattern as the reference `@x402/core/express` middleware.
 - **Auto-managed MPP secret** — if you don't provide one, the SDK generates a 32-byte HMAC key and persists it to `.payai/mpp-secret` (`mode 0o600`), alongside an auto-written `.payai/.gitignore` so it can't be committed.
@@ -117,7 +118,7 @@ From the repo root:
 ```bash
 cd typescript
 npm install
-npm test          # 100 unit tests (utils, config, x402, mpp adapters)
+npm test          # unit tests (utils, config, core, x402, mpp adapters)
 npm run typecheck
 npm run build     # tsup → dist/
 ```

@@ -1,8 +1,14 @@
-import { decodePaymentRequiredHeader, encodePaymentSignatureHeader } from "@x402/core/http";
+import {
+  decodePaymentRequiredHeader,
+  decodePaymentResponseHeader,
+  encodePaymentSignatureHeader,
+} from "@x402/core/http";
 import { describe, expect, it, vi } from "vitest";
 import type { CustomAssetDef, ResolvedX402Config } from "../types.js";
 import type { ChallengeContext } from "./types.js";
 import { type CreateX402AdapterDeps, createX402Adapter } from "./x402.js";
+
+type X402Facilitator = NonNullable<CreateX402AdapterDeps["facilitator"]>;
 
 /**
  * Build a stub facilitator client whose `getSupported()` returns the given
@@ -439,5 +445,94 @@ describe("x402 adapter — verifyAndSettle requirements validation", () => {
     const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const result = await adapter.verifyAndSettle("not-a-real-header", ctx);
     expect(result.status).toBe(402);
+  });
+});
+
+describe("x402 adapter — finalization", () => {
+  async function signatureForServerAccepts(
+    adapter: ReturnType<typeof createX402Adapter>,
+    ctx: ChallengeContext,
+  ): Promise<string> {
+    const headers = await adapter.generateChallenge(ctx);
+    const required = decodePaymentRequiredHeader(requirePaymentRequired(headers));
+    return encodePaymentSignatureHeader({
+      x402Version: 2,
+      accepted: required.accepts[0],
+      payload: { signature: "0xdeadbeef", authorization: {} },
+    });
+  }
+
+  function payableFacilitator(
+    settle: X402Facilitator["settle"] = vi.fn(
+      async () =>
+        ({
+          success: true,
+          payer: "0xpayer",
+          transaction: "0xsettled",
+          network: "eip155:84532",
+        }) as Awaited<ReturnType<X402Facilitator["settle"]>>,
+    ),
+  ): X402Facilitator {
+    return {
+      getSupported: vi.fn(async () => ({ kinds: [] })),
+      verify: vi.fn(async () => ({ isValid: true, payer: "0xpayer" })),
+      settle,
+    } as X402Facilitator;
+  }
+
+  it("finalize settles payment and returns a PAYMENT-RESPONSE header", async () => {
+    const facilitator = payableFacilitator();
+    const adapter = createX402Adapter(CONFIG, { facilitator });
+    const ctx = buildContext();
+    const header = await signatureForServerAccepts(adapter, ctx);
+
+    const result = await adapter.verifyAndSettle(header, ctx);
+    if (result.status !== 200) throw new Error("Expected verified payment");
+
+    const finalized = await result.finalize();
+
+    expect(finalized.settled).toBe(true);
+    expect(Object.keys(finalized.headers)).toEqual(["PAYMENT-RESPONSE"]);
+    expect(decodePaymentResponseHeader(finalized.headers["PAYMENT-RESPONSE"])).toMatchObject({
+      success: true,
+      transaction: "0xsettled",
+      network: "eip155:84532",
+    });
+    expect(facilitator.settle).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares one settlement between finalize and settleAndReceipt", async () => {
+    const facilitator = payableFacilitator();
+    const adapter = createX402Adapter(CONFIG, { facilitator });
+    const ctx = buildContext();
+    const header = await signatureForServerAccepts(adapter, ctx);
+
+    const result = await adapter.verifyAndSettle(header, ctx);
+    if (result.status !== 200) throw new Error("Expected verified payment");
+
+    const finalized = await result.finalize();
+    const response = await result.settleAndReceipt(new Response("ok"));
+
+    expect(response.headers.get("PAYMENT-RESPONSE")).toBe(finalized.headers["PAYMENT-RESPONSE"]);
+    expect(facilitator.settle).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws SettlementError when finalize receives a failed settlement", async () => {
+    const facilitator = payableFacilitator(
+      vi.fn(async () => ({
+        success: false,
+        errorReason: "insufficient funds",
+        transaction: "",
+        network: "eip155:84532",
+      })) as X402Facilitator["settle"],
+    );
+    const adapter = createX402Adapter(CONFIG, { facilitator });
+    const ctx = buildContext();
+    const header = await signatureForServerAccepts(adapter, ctx);
+
+    const result = await adapter.verifyAndSettle(header, ctx);
+    if (result.status !== 200) throw new Error("Expected verified payment");
+
+    await expect(result.finalize()).rejects.toThrow("insufficient funds");
   });
 });

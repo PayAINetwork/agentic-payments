@@ -38,19 +38,20 @@ import { expandPayTo, matchEndpoint, resolveAssets, resolvePrice } from "./utils
  * 5. Call the matching adapter's `verifyAndSettle`. Failure fires
  *    `onPaymentFailed` and returns 402.
  * 6. Fire `onPaymentVerified`. A `{ reject: true }` return short-circuits to 402.
- * 7. Wrap the returned `settleAndReceipt` so `onPaymentSettled` /
- *    `onPaymentFailed` fire after the caller invokes it. Return
- *    `{ status: 200, protocol, payment, settleAndReceipt }`.
+ * 7. Wrap the returned finalization helpers so `onPaymentSettled` /
+ *    `onPaymentFailed` fire after the caller invokes either one. Return
+ *    `{ status: 200, protocol, payment, finalize, settleAndReceipt }`.
  *
  * @example
  * // Direct usage (no framework) — handy for Lambda / edge runtimes.
  * const ap = new AgentPayments({ payTo: "0x...", endpoints: { ... } });
  * const result = await ap.processRequest(requestContext);
  * if (result.status === 402) return new Response(null, { status: 402, headers: result.headers });
- * // Run your handler logic to produce a response object, then pass it to
- * // settleAndReceipt. Settlement (x402 facilitator call / MPP receipt
- * // attachment) happens inside that call — before the response reaches the
- * // client. Return the settled response; do not send anything beforehand.
+ * // Run your handler logic to produce a response object, then either call
+ * // finalize() for protocol headers or settleAndReceipt(response) to attach
+ * // them to the Response. Settlement (x402 facilitator call / MPP receipt
+ * // attachment) happens inside finalization — before the response reaches
+ * // the client. Do not send anything beforehand.
  * const myResponse = await runHandler(requestContext);
  * return result.settleAndReceipt(myResponse);
  */
@@ -100,9 +101,10 @@ export class AgentPayments {
    * - `{ status: 402, headers }` — client must pay. Emit headers verbatim
    *   (some values are arrays for multiple header instances — the caller's
    *   header-setter must handle both).
-   * - `{ status: 200, protocol, payment, settleAndReceipt }` — payment
-   *   verified. Run your handler, then call `settleAndReceipt(response)`
-   *   to finalize settlement (x402) or attach a receipt (MPP).
+   * - `{ status: 200, protocol, payment, finalize, settleAndReceipt }` —
+   *   payment verified. Run your handler, then call `finalize()` to receive
+   *   protocol receipt headers, or `settleAndReceipt(response)` to attach
+   *   them to a WHATWG Response.
    *
    * @param request - Normalized request context. Your framework middleware is
    *   responsible for building this from the native request object.
@@ -187,21 +189,43 @@ export class AgentPayments {
       }
     }
 
-    // Wrap settleAndReceipt to fire onPaymentSettled / onPaymentFailed.
-    const inner = result.settleAndReceipt.bind(result);
+    // Wrap finalization helpers to fire onPaymentSettled / onPaymentFailed.
+    // Hook delivery is once-per-paid-request even when callers use both APIs.
+    let settledHookFired = false;
+    const fireSettledHookOnce = async () => {
+      if (settledHookFired) return;
+      settledHookFired = true;
+      await runHook(hooks?.onPaymentSettled, () =>
+        buildHookContext(request, endpoint, result.payment),
+      );
+    };
+    const fireFailedHook = async (err: unknown) => {
+      await runHook(hooks?.onPaymentFailed, () =>
+        buildHookContext(request, endpoint, result.payment, {
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    };
+    const innerFinalize = result.finalize.bind(result);
+    result.finalize = async () => {
+      try {
+        const finalized = await innerFinalize();
+        await fireSettledHookOnce();
+        return finalized;
+      } catch (err) {
+        await fireFailedHook(err);
+        throw err;
+      }
+    };
+
+    const innerSettleAndReceipt = result.settleAndReceipt.bind(result);
     result.settleAndReceipt = async (response: Response) => {
       try {
-        const settled = await inner(response);
-        await runHook(hooks?.onPaymentSettled, () =>
-          buildHookContext(request, endpoint, result.payment),
-        );
+        const settled = await innerSettleAndReceipt(response);
+        await fireSettledHookOnce();
         return settled;
       } catch (err) {
-        await runHook(hooks?.onPaymentFailed, () =>
-          buildHookContext(request, endpoint, result.payment, {
-            message: err instanceof Error ? err.message : String(err),
-          }),
-        );
+        await fireFailedHook(err);
         throw err;
       }
     };
