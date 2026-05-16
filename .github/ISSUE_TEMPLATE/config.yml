@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: PayAI documentation
+    url: https://docs.payai.network
+    about: Check the public docs before opening a usage question.

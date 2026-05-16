@@ -117,7 +117,7 @@ From the repo root:
 ```bash
 cd typescript
 npm install
-npm test          # 100 unit tests (utils, config, x402, mpp adapters)
+npm test          # unit tests (utils, config, x402, mpp adapters)
 npm run typecheck
 npm run build     # tsup → dist/
 ```
@@ -133,6 +133,8 @@ npm run smoke
 ## Design docs
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — request flow, adapter contracts, response-buffering rationale, asset model, security properties. Start here if you're contributing.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — local checks, branch conventions, PR expectations, and payment-safety notes.
+- [`CHANGELOG.md`](CHANGELOG.md) — release notes grouped under `Unreleased` until a release is cut.
 - [`typescript/src/protocols/types.ts`](typescript/src/protocols/types.ts) — the `ProtocolAdapter` interface adapters implement.
 
 ## External references
