@@ -5,7 +5,12 @@ import {
   HTTPFacilitatorClient,
 } from "@x402/core/http";
 import { SettlementError, VerificationError } from "../errors.js";
-import type { ProcessResult200, ProcessResult402, ResolvedX402Config } from "../types.js";
+import type {
+  PaymentFinalization,
+  ProcessResult200,
+  ProcessResult402,
+  ResolvedX402Config,
+} from "../types.js";
 import { getAssetNetworkInfo, toAtomicUnits } from "../utils.js";
 import type { ChallengeContext, ProtocolAdapter } from "./types.js";
 
@@ -215,8 +220,44 @@ export function createX402Adapter(
         } as ProcessResult402;
       }
 
-      // Return result with deferred settlement
-      // x402 settles AFTER the handler succeeds (response buffering)
+      let finalization: Promise<PaymentFinalization> | null = null;
+      const settlePayment = async (): Promise<PaymentFinalization> => {
+        let settleResponse: Awaited<ReturnType<typeof facilitator.settle>>;
+        try {
+          settleResponse = await facilitator.settle(paymentPayload, requirements);
+        } catch (err) {
+          throw new SettlementError(
+            "x402",
+            `Facilitator settle failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        if (!settleResponse.success) {
+          throw new SettlementError(
+            "x402",
+            settleResponse.errorMessage ?? settleResponse.errorReason ?? "Settlement failed",
+          );
+        }
+
+        return {
+          headers: { "PAYMENT-RESPONSE": encodePaymentResponseHeader(settleResponse) },
+          settled: true,
+        };
+      };
+
+      const finalize = async (): Promise<PaymentFinalization> => {
+        finalization ??= settlePayment();
+        try {
+          return await finalization;
+        } catch (err) {
+          finalization = null;
+          throw err;
+        }
+      };
+
+      // Return result with deferred settlement. x402 settles AFTER the handler
+      // succeeds, but callers can choose either Response-bound or header-only
+      // finalization. Both paths share one settlement call.
       return {
         status: 200,
         protocol: "x402",
@@ -227,27 +268,13 @@ export function createX402Adapter(
           asset: requirements.asset,
           amount: requirements.amount,
         },
+        finalize,
         async settleAndReceipt(response: Response): Promise<Response> {
-          let settleResponse: Awaited<ReturnType<typeof facilitator.settle>>;
-          try {
-            settleResponse = await facilitator.settle(paymentPayload, requirements);
-          } catch (err) {
-            throw new SettlementError(
-              "x402",
-              `Facilitator settle failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-
-          if (!settleResponse.success) {
-            throw new SettlementError(
-              "x402",
-              settleResponse.errorMessage ?? settleResponse.errorReason ?? "Settlement failed",
-            );
-          }
-
-          // Clone response and add settlement header
+          const finalized = await finalize();
           const headers = new Headers(response.headers);
-          headers.set("PAYMENT-RESPONSE", encodePaymentResponseHeader(settleResponse));
+          for (const [key, value] of Object.entries(finalized.headers)) {
+            headers.set(key, value);
+          }
 
           return new Response(response.body, {
             status: response.status,

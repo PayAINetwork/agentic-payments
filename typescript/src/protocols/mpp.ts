@@ -2,6 +2,7 @@ import { Credential } from "mppx";
 import { TEMPO_NETWORKS } from "../assets.js";
 import { VerificationError } from "../errors.js";
 import type {
+  PaymentFinalization,
   PaymentMetadata,
   ProcessResult200,
   ProcessResult402,
@@ -122,15 +123,36 @@ export function createMppAdapter(config: ResolvedMppConfig): ProtocolAdapter {
 
       const tempoNet = findTempoNetwork(ctx.networks) ?? "tempo:mainnet";
       const withReceipt = result.withReceipt;
+      let finalization: PaymentFinalization | null = null;
+      const finalize = async (): Promise<PaymentFinalization> => {
+        if (!finalization) {
+          const receiptResponse = withReceipt(new Response(null));
+          const receipt = receiptResponse.headers.get("Payment-Receipt");
+          finalization = {
+            headers: receipt ? { "Payment-Receipt": receipt } : {},
+            settled: true,
+          };
+        }
+        return finalization;
+      };
 
       return {
         status: 200,
         protocol: "mpp",
         payment: extractPayment(headerValue, tempoNet),
+        finalize,
         async settleAndReceipt(response: Response): Promise<Response> {
-          // MPP: payment settled on-chain before the credential was sent.
-          // mppx's withReceipt attaches the Payment-Receipt header.
-          return withReceipt(response);
+          const finalized = await finalize();
+          const headers = new Headers(response.headers);
+          for (const [key, value] of Object.entries(finalized.headers)) {
+            headers.set(key, value);
+          }
+
+          return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          });
         },
       };
     },
