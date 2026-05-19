@@ -28,6 +28,7 @@ jobs:
           cache-dependency-path: typescript/package-lock.json
 
       - run: npm ci
+      - run: npm test
       - run: npm run check
       - run: npm publish --access public --provenance
         env:
