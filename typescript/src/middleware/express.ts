@@ -6,6 +6,30 @@ export { AgentPayments } from "../agent-payments.js";
 export type { AgentPaymentsConfig } from "../types.js";
 
 /**
+ * Express RequestHandler returned by {@link agentPayments}, augmented with
+ * runtime control hooks. The handler still works as a drop-in middleware
+ * (`app.use(agentPayments({...}))`); the extra members let callers refresh
+ * the endpoint manifest dynamically and reach the underlying
+ * {@link AgentPayments} instance for advanced use cases.
+ */
+export interface AgentPaymentsHandler extends RequestHandler {
+  /** Underlying {@link AgentPayments} — exposed for tests and advanced control. */
+  agentPayments: AgentPayments;
+  /**
+   * Re-publish the endpoint manifest to the PayAI dashboard.
+   * Useful for marketplaces/CMS-style apps where routes change at runtime.
+   * See {@link AgentPayments.registerEndpoints}.
+   */
+  registerEndpoints: (endpoints: AgentPaymentsConfig["endpoints"]) => Promise<void>;
+  /**
+   * Stop the managed-mode SSE event loop. Wire this into your server's
+   * SIGTERM handler so the SDK doesn't leak the long-lived connection on
+   * graceful shutdown. See {@link AgentPayments.shutdown}.
+   */
+  shutdown: () => void;
+}
+
+/**
  * Express middleware for x402 + MPP payments.
  *
  * - Unprotected routes pass through.
@@ -18,10 +42,10 @@ export type { AgentPaymentsConfig } from "../types.js";
  * The buffering strategy records `[methodName, args]` tuples and replays them
  * verbatim — the same pattern used by @x402/core's Express middleware.
  */
-export function agentPayments(config: AgentPaymentsConfig): RequestHandler {
+export function agentPayments(config: AgentPaymentsConfig): AgentPaymentsHandler {
   const ap = new AgentPayments(config);
 
-  return async (req: Request, res: Response, next: NextFunction) => {
+  const handler = (async (req: Request, res: Response, next: NextFunction) => {
     let result: import("../types.js").ProcessResult;
     try {
       result = await ap.processRequest(buildRequestContext(req));
@@ -43,8 +67,21 @@ export function agentPayments(config: AgentPaymentsConfig): RequestHandler {
     }
 
     await runWithSettlement(result, req, res, next);
-  };
+  }) as AgentPaymentsHandler;
+
+  // Expose runtime controls on the handler itself. Express only ever invokes
+  // the function as middleware; the additional properties let callers do:
+  //   const handler = agentPayments({...});
+  //   app.use(handler);
+  //   await handler.registerEndpoints(newRoutes);
+  handler.agentPayments = ap;
+  handler.registerEndpoints = (endpoints) => ap.registerEndpoints(endpoints);
+  handler.shutdown = () => ap.shutdown();
+
+  return handler;
 }
+
+export const payai = agentPayments;
 
 type BufferedCall =
   | ["writeHead", Parameters<Response["writeHead"]>]

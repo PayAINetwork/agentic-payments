@@ -12,6 +12,16 @@ export class ConfigError extends AgentPaymentsError {
   }
 }
 
+export class PayAIApiError extends AgentPaymentsError {
+  public readonly status: number | null;
+
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.name = "PayAIApiError";
+    this.status = status;
+  }
+}
+
 export class ProtocolError extends AgentPaymentsError {
   public readonly protocol: string;
 
