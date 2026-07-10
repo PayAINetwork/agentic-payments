@@ -7,9 +7,8 @@ import type { AssetRegistry, CustomAssetDef } from "./types.js";
 
 /**
  * USDC covers every PayAI-supported x402 network, including chains where the
- * deployed stablecoin is a bridged variant or (for KiteAI testnet) an
- * alternative USD-pegged token. Users configure `assets: ["USDC"]` and the
- * SDK transparently uses whichever deployment is canonical per chain.
+ * deployed stablecoin is a bridged variant. Users configure `assets: ["USDC"]`
+ * and the SDK transparently uses whichever deployment is canonical per chain.
  */
 export const USDC: CustomAssetDef = {
   name: "USDC",
@@ -25,10 +24,6 @@ export const USDC: CustomAssetDef = {
       decimals: 6,
       eip712Name: "USD Coin", // Avalanche C-Chain USDC
     },
-    "eip155:4689": {
-      address: "0x3B2bf2b523f54C4E454F08Aa286D03115aFF326c",
-      decimals: 6, // IoTeX USDC
-    },
     "eip155:1329": {
       address: "0x3894085Ef7Ff0f0aeDf52E2A2704928d1Ec074F1",
       decimals: 6, // Sei USDC
@@ -38,10 +33,6 @@ export const USDC: CustomAssetDef = {
       decimals: 6,
       eip712Name: "USD Coin", // Polygon USDC
     },
-    "eip155:3338": {
-      address: "0x7A98288740407E1A0db5E18C4BE9a6F42FE77e40",
-      decimals: 6, // Peaq USDC
-    },
     "eip155:196": {
       address: "0x74b7F16337b8972027F6196A17a631aC6dE26d22",
       decimals: 6, // XLayer USDC
@@ -50,11 +41,6 @@ export const USDC: CustomAssetDef = {
       address: "0x85889c8c714505E0c94b30fcfcF64fE3Ac8FCb20",
       decimals: 6,
       eip712Name: "Bridged USDC (SKALE Bridge)", // Skale mainnet
-    },
-    "eip155:2366": {
-      address: "0x7aB6f3ed87C42eF0aDb67Ed95090f8bF5240149e",
-      decimals: 6,
-      eip712Name: "Bridged USDC (Kite AI)", // KiteAI mainnet
     },
 
     // --- EVM testnets ---
@@ -82,15 +68,6 @@ export const USDC: CustomAssetDef = {
       address: "0x2e08028E3C4c2356572E096d8EF835cD5C6030bD",
       decimals: 6,
       eip712Name: "Bridged USDC (SKALE Bridge)", // Skale testnet
-    },
-    // KiteAI testnet uses pieUSD as its USDC-equivalent: different token,
-    // different decimals (18, not 6), different EIP-712 domain. We surface
-    // it under USDC so users don't have to special-case KiteAI.
-    "eip155:2368": {
-      address: "0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A",
-      decimals: 18,
-      eip712Name: "pieUSD",
-      eip712Version: "1",
     },
 
     // --- SVM ---
@@ -162,13 +139,10 @@ export const X402_EVM_NETWORKS = {
   mainnet: [
     "eip155:8453", // Base
     "eip155:43114", // Avalanche C-Chain
-    "eip155:4689", // IoTeX
     "eip155:1329", // Sei
     "eip155:137", // Polygon
-    "eip155:3338", // Peaq
     "eip155:196", // XLayer
     "eip155:1187947933", // Skale (skale-base)
-    "eip155:2366", // KiteAI
   ],
   testnet: [
     "eip155:84532", // Base Sepolia
@@ -177,7 +151,6 @@ export const X402_EVM_NETWORKS = {
     "eip155:80002", // Polygon Amoy
     "eip155:1952", // XLayer testnet
     "eip155:324705682", // Skale (skale-base-sepolia)
-    "eip155:2368", // KiteAI testnet
   ],
 } as const;
 

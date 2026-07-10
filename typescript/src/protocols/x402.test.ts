@@ -260,12 +260,12 @@ describe("x402 adapter — generateChallenge", () => {
   });
 
   it("uses per-network decimals when computing atomic amount", async () => {
-    // REGRESSION GUARD: pieUSD (KiteAI testnet) has 18 decimals.
+    // REGRESSION GUARD: some tokens use 18 decimals instead of 6.
     // $0.01 * 10^18 = 10000000000000000, not 10000.
     const PIE: CustomAssetDef = {
       name: "USDC",
       addresses: {
-        "eip155:2368": {
+        "eip155:99999": {
           address: "0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A",
           decimals: 18,
           eip712Name: "pieUSD",
@@ -276,15 +276,15 @@ describe("x402 adapter — generateChallenge", () => {
     const adapter = createX402Adapter(
       {
         ...CONFIG,
-        supportedNetworks: ["eip155:2368"],
+        supportedNetworks: ["eip155:99999"],
       },
       { facilitator: stubFacilitator() },
     );
     const headers = await adapter.generateChallenge(
       buildContext({
         resolvedPrices: [{ asset: PIE, amount: "$0.01" }],
-        networks: ["eip155:2368"],
-        payTo: { "eip155:2368": RECIPIENT },
+        networks: ["eip155:99999"],
+        payTo: { "eip155:99999": RECIPIENT },
       }),
     );
     const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));

@@ -310,22 +310,9 @@ describe("getAssetNetworkInfo", () => {
     expect(info?.eip712Version).toBe("2");
   });
 
-  it("applies per-network decimals override (pieUSD on KiteAI testnet)", () => {
-    // REGRESSION GUARD: USDC on KiteAI testnet is actually pieUSD —
-    // different token, different decimals. The schema MUST surface this
-    // so atomic-unit math produces the right amount on the wire.
-    const info = getAssetNetworkInfo(USDC, "eip155:2368");
-    expect(info?.decimals).toBe(18);
-    expect(info?.eip712Name).toBe("pieUSD");
-    expect(info?.eip712Version).toBe("1");
-    expect(info?.address).toBe("0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A");
-  });
-
   it("applies per-network eip712Name for bridged variants", () => {
     const skaleMainnet = getAssetNetworkInfo(USDC, "eip155:1187947933");
     expect(skaleMainnet?.eip712Name).toBe("Bridged USDC (SKALE Bridge)");
-    const kiteaiMainnet = getAssetNetworkInfo(USDC, "eip155:2366");
-    expect(kiteaiMainnet?.eip712Name).toBe("Bridged USDC (Kite AI)");
   });
 });
 
