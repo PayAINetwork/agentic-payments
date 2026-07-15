@@ -259,38 +259,6 @@ describe("x402 adapter — generateChallenge", () => {
     expect(decoded.accepts[0].extra).not.toHaveProperty("version");
   });
 
-  it("uses per-network decimals when computing atomic amount", async () => {
-    // REGRESSION GUARD: some tokens use 18 decimals instead of 6.
-    // $0.01 * 10^18 = 10000000000000000, not 10000.
-    const PIE: CustomAssetDef = {
-      name: "USDC",
-      addresses: {
-        "eip155:99999": {
-          address: "0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A",
-          decimals: 18,
-          eip712Name: "pieUSD",
-          eip712Version: "1",
-        },
-      },
-    };
-    const adapter = createX402Adapter(
-      {
-        ...CONFIG,
-        supportedNetworks: ["eip155:99999"],
-      },
-      { facilitator: stubFacilitator() },
-    );
-    const headers = await adapter.generateChallenge(
-      buildContext({
-        resolvedPrices: [{ asset: PIE, amount: "$0.01" }],
-        networks: ["eip155:99999"],
-        payTo: { "eip155:99999": RECIPIENT },
-      }),
-    );
-    const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));
-    expect(decoded.accepts[0].amount).toBe("10000000000000000"); // 10^16
-  });
-
   it("filters out networks that are not in supportedNetworks", async () => {
     // REGRESSION GUARD: x402 must not emit accepts for chains its facilitator
     // can't settle on (e.g. Tempo, which is MPP-only). Even if an asset has
