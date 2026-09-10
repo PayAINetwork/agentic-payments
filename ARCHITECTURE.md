@@ -32,7 +32,7 @@ This document describes how the TypeScript SDK handles a payment-gated HTTP requ
  │        └─ fail → onPaymentFailed, 402                  │
  │  g. onPaymentVerified hook                             │
  │        └─ { reject } → 402                             │
- │  h. wrap settleAndReceipt to fire Settled/Failed hooks │
+ │  h. wrap finalize helpers to fire Settled/Failed hooks │
  │  i. return ProcessResult200                            │
  └──────┬─────────────────────────────────────────────────┘
         │  ProcessResult200
@@ -58,7 +58,7 @@ Framework-agnostic. `processRequest(ctx)` returns one of three shapes:
 
 - `{ status: "passthrough" }` — route not protected, or a hook granted free access.
 - `{ status: 402, headers }` — client didn't pay or paid incorrectly; headers contain the protocol challenges.
-- `{ status: 200, protocol, payment, settleAndReceipt }` — payment verified, handler may run. Caller invokes `settleAndReceipt(response)` once the handler has produced a successful response.
+- `{ status: 200, protocol, payment, finalize, settleAndReceipt }` — payment verified, handler may run. Caller invokes `finalize()` for protocol receipt headers or `settleAndReceipt(response)` once the handler has produced a successful response.
 
 ### Protocol adapters (`src/protocols/*.ts`)
 
@@ -74,13 +74,13 @@ interface ProtocolAdapter {
 }
 ```
 
-**x402 adapter** (`protocols/x402.ts`) wraps `@x402/core/http`. Settlement is **deferred** — `verifyAndSettle` only verifies the payment signature with the facilitator; the returned `settleAndReceipt` function calls `facilitator.settle` later, after the handler runs successfully. This lets the server avoid settling payments for responses that ultimately error.
+**x402 adapter** (`protocols/x402.ts`) wraps `@x402/core/http`. Settlement is **deferred** — `verifyAndSettle` only verifies the payment signature with the facilitator; the returned finalization helpers call `facilitator.settle` later, after the handler runs successfully. `finalize()` returns the `PAYMENT-RESPONSE` header map, while `settleAndReceipt(response)` attaches those headers to a WHATWG `Response`. Both helpers share one settlement call so direct users cannot accidentally settle twice.
 
 The adapter filters `ctx.networks` against `config.supportedNetworks` before emitting any `accepts` entries. This prevents us from advertising payment options on chains the configured facilitator can't actually settle.
 
 Per-request `accepts` entries include `extra: { name, version }` carrying the EIP-712 domain metadata the client needs to sign payment authorizations — sourced from the per-network `AssetNetworkInfo` in the asset registry.
 
-**MPP adapter** (`protocols/mpp.ts`) wraps `mppx/server`. Tempo payments settle on-chain **before** the client sends the credential, so `verifyAndSettle` performs the full verification path (HMAC check, expiry, on-chain transaction check via mppx's `compose()(req)`) and the returned `settleAndReceipt` simply attaches the `Payment-Receipt` header — no additional network call needed.
+**MPP adapter** (`protocols/mpp.ts`) wraps `mppx/server`. Tempo payments settle on-chain **before** the client sends the credential, so `verifyAndSettle` performs the full verification path (HMAC check, expiry, on-chain transaction check via mppx's `compose()(req)`). `finalize()` returns the `Payment-Receipt` header and `settleAndReceipt(response)` attaches it — no additional network call needed.
 
 The adapter parses `chainId` explicitly from the CAIP-2 network identifier (`eip155:42431` → `42431`) and passes it to mppx per-request; without this, mppx's internal client resolution would fall back to Tempo mainnet even when `live: false`.
 
@@ -122,7 +122,7 @@ Four hooks, each wrapped in `runHook` which swallows errors silently (hooks are 
 | `onPaymentSettled` | After settlement succeeds | No — informational |
 | `onPaymentFailed` | Verification OR settlement fails | No — informational |
 
-`onPaymentFailed` is wired at both call sites: verification failure fires it synchronously in `processRequest`; settlement failure fires it inside the wrapped `settleAndReceipt` so it works transparently for every framework middleware.
+`onPaymentFailed` is wired at both call sites: verification failure fires it synchronously in `processRequest`; settlement failure fires it inside the wrapped `finalize` / `settleAndReceipt` helpers so it works transparently for direct users and every framework middleware.
 
 ## Asset model
 
@@ -163,7 +163,7 @@ The shorthand is detected by `isPayToShorthand()` — an object whose keys are a
 
 ## Testing
 
-- **Unit tests** — 105 tests across `utils.test.ts`, `config.test.ts`, `protocols/x402.test.ts`, `protocols/mpp.test.ts`. Run with `npm test` in `typescript/`. Vitest, ~500ms.
+- **Unit tests** — coverage across `utils.test.ts`, `config.test.ts`, `agent-payments.test.ts`, `protocols/x402.test.ts`, and `protocols/mpp.test.ts`. Run with `npm test` in `typescript/`.
 - **Smoke tests** — `examples/typescript/npm run smoke` spawns each example via its own `npm start`, probes the 402 response, decodes the x402 `accepts` and MPP `request` payloads, and asserts canonical amounts + chainId + presence of both protocol headers. CI-ready.
 
 Relevant test files for specific invariants:

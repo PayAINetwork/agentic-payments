@@ -7,6 +7,7 @@ export type {
   EndpointMap,
   HookContext,
   Hooks,
+  PaymentFinalization,
   PaymentMetadata,
   PayTo,
   PayToShorthand,

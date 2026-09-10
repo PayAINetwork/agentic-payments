@@ -364,9 +364,21 @@ export interface ProcessResult402 {
   headers: Record<string, string | string[]>;
 }
 
+export interface PaymentFinalization {
+  /** Headers callers should attach to their successful response. */
+  headers: Record<string, string>;
+  /** True once the protocol-specific success path completed. */
+  settled: boolean;
+}
+
 export interface ProcessResult200 {
   status: 200;
   protocol: Protocol;
+  /**
+   * Finalize payment and return the protocol receipt headers without binding
+   * the SDK to a concrete Response implementation.
+   */
+  finalize(): Promise<PaymentFinalization>;
   /** Settle payment and attach receipt headers to a Response */
   settleAndReceipt(response: Response): Promise<Response>;
   /** Payment metadata */
