@@ -140,6 +140,7 @@ npm run smoke
 - **x402 spec** — https://x402.org (see especially https://github.com/x402-foundation/x402)
 - **MPP spec** — https://paymentauth.org (draft-httpauth-payment-00 and sibling intent specs)
 - **mppx (MPP TypeScript SDK)** — https://github.com/wevm/mppx
+- **Nano (XNO) x402 scheme** — `nano:mainnet` exact scheme for x402 (`specs/schemes/exact/scheme_exact_nano.md` in the x402 spec) plus a published Python payer for the OpenAI Agents SDK (github.com/PANDeveloper001/openai-agents-nano-x402). Both cover the fee-less, sub-second settlement rail; see the filed proposal for a third `ProtocolAdapter`.
 
 ## License
 
