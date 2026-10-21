@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a reproducible SDK, middleware, or example bug.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Do not include private keys, wallet seeds, API keys, or real customer data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include the smallest route/config/example that reproduces the issue.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Request ...
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Protocol
+      options:
+        - x402
+        - MPP
+        - Both
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: package-version
+    attributes:
+      label: Package version
+      placeholder: "@payai/agentic-payments@0.1.6"
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version, OS, framework, network, and whether this is testnet or live mode.
+      placeholder: "Node 22, macOS, Express 5, testnet"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or headers
+      description: Redact secrets and signatures before pasting.
+      render: shell

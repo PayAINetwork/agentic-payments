@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a focused SDK or example improvement.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What developer workflow or payment-agent scenario should this improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the API, middleware behavior, or example change you want.
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Protocol scope
+      options:
+        - x402
+        - MPP
+        - Both
+        - Protocol-agnostic
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Mention any workaround you tried.

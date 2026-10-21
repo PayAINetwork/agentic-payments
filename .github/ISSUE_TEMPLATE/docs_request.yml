@@ -1,0 +1,24 @@
+name: Documentation request
+description: Request clearer README, architecture, example, or docs-site coverage.
+title: "docs: "
+labels: ["documentation"]
+body:
+  - type: textarea
+    id: unclear
+    attributes:
+      label: What is unclear?
+      description: Point to the README, architecture doc, example, API surface, or docs-site page.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should the docs explain?
+      description: Include the workflow, question, or code path you expected to find.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Optional. Add links, snippets, or the integration you are building.
