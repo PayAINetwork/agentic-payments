@@ -102,13 +102,21 @@ See [`examples/typescript/.env.example`](examples/typescript/.env.example) for a
 ## Feature highlights
 
 - **Dual protocol in one middleware** — no separate code paths for x402 vs. MPP; the SDK picks the right adapter based on the client's request headers.
-- **Built-in asset registry** — `assets: ["USDC"]` automatically covers sixteen EVM chains (Base, Avalanche, Polygon, Sei, IoTeX, Peaq, XLayer, Skale, KiteAI and their testnets) plus Solana mainnet and devnet with correct per-chain contract addresses, decimals, and EIP-712 domains. `assets: ["CASH"]` resolves Phantom's CASH stablecoin on Solana. Users never look up a token address.
+- **Built-in asset registry** — `assets: ["USDC"]` covers the preconfigured Base, BNB Smart Chain, Avalanche, Polygon, Sei, X Layer, SKALE and Solana deployments. Each entry carries its own address, decimals and transfer method. Available testnet assets are listed in `typescript/src/assets.ts`. `assets: ["CASH"]` resolves Phantom's CASH stablecoin on Solana.
 - **Per-family `payTo` shorthand** — write `payTo: { evm, solana }` and the SDK spreads each address across every supported network in its family, using mainnet or testnet chains based on the `live` flag.
 - **Safe-by-default `live` flag** — defaults to `false` (testnet, no real funds). Real payments require explicit `live: true` opt-in, matching Stripe's `livemode` convention.
 - **Dynamic price and payTo** — both can be functions of the request, so marketplaces, tiered APIs, and multi-tenant deployments work out of the box.
 - **Lifecycle hooks** — `onRequest` can grant free access (internal keys, auth tokens), `onPaymentVerified` can reject after verification, `onPaymentSettled`/`onPaymentFailed` give you observability.
 - **Response buffering for x402** — the middleware buffers `writeHead`/`write`/`end`/`flushHeaders` while the handler runs, so settlement happens only after a successful response (≥400s skip settlement). Same pattern as the reference `@x402/core/express` middleware.
 - **Auto-managed MPP secret** — if you don't provide one, the SDK generates a 32-byte HMAC key and persists it to `.payai/mpp-secret` (`mode 0o600`), alongside an auto-written `.payai/.gitignore` so it can't be committed.
+
+## BNB Smart Chain (BSC)
+
+BSC mainnet (`eip155:56`) supports x402 v2 `exact` payments using Permit2. Both Binance-Peg USDC (`0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d`) and USDT (`0x55d398326f99059fF775485246999027B3197955`) have **18 decimals**. They are distinct from native USDC on other networks. Select `networks: ["eip155:56"]`, `live: true`, and `assets: ["USDC", "USDT"]` with your EVM `payTo` address.
+
+The payer needs BNB for the initial token approval to Permit2 (`0x000000000022D473030F116dDEE9F6B43aC78BA3`). After approval, PayAI pays settlement gas. A merchant API key does not sponsor that approval. BSC `upto` and batch payments are not advertised by this SDK. Do not reuse mainnet token addresses on BSC testnet (`eip155:97`); configure a separately deployed test token explicitly.
+
+[Supported networks and token setup](https://docs.payai.network/x402/supported-networks#bnb-smart-chain) and the live [`/supported`](https://facilitator.payai.network/supported) response describe facilitator availability. SDK defaults can be a subset of that list; check your installed SDK version.
 
 ## Development
 

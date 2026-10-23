@@ -1,5 +1,6 @@
 import { decodePaymentRequiredHeader, encodePaymentSignatureHeader } from "@x402/core/http";
 import { describe, expect, it, vi } from "vitest";
+import { USDC as BUILT_IN_USDC, USDT as BUILT_IN_USDT } from "../assets.js";
 import type { CustomAssetDef, ResolvedX402Config } from "../types.js";
 import type { ChallengeContext } from "./types.js";
 import { type CreateX402AdapterDeps, createX402Adapter } from "./x402.js";
@@ -98,6 +99,52 @@ async function decode(ctx: ChallengeContext) {
 }
 
 describe("x402 adapter — generateChallenge", () => {
+  it("offers both BSC stablecoins as 18-decimal Permit2 exact payments", async () => {
+    const adapter = createX402Adapter(
+      { ...CONFIG, supportedNetworks: ["eip155:56"] },
+      { facilitator: stubFacilitator([{ scheme: "exact", network: "eip155:56" }]) },
+    );
+    const headers = await adapter.generateChallenge(
+      buildContext({
+        networks: ["eip155:56"],
+        payTo: { "eip155:56": RECIPIENT },
+        resolvedPrices: [
+          { asset: BUILT_IN_USDC, amount: "$0.01" },
+          { asset: BUILT_IN_USDT, amount: "$0.01" },
+        ],
+      }),
+    );
+    const decoded = decodePaymentRequiredHeader(requirePaymentRequired(headers));
+    expect(decoded.accepts).toHaveLength(2);
+    expect(decoded.accepts.map((entry) => entry.asset)).toEqual([
+      "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      "0x55d398326f99059fF775485246999027B3197955",
+    ]);
+    for (const entry of decoded.accepts) {
+      expect(entry.amount).toBe("10000000000000000");
+      expect(entry.scheme).toBe("exact");
+      expect(entry.extra).toEqual({ assetTransferMethod: "permit2" });
+    }
+  });
+
+  it.each([
+    "upto",
+    "batch-settlement",
+  ])("does not offer unsupported BSC %s payments", async (scheme) => {
+    const adapter = createX402Adapter(
+      { ...CONFIG, scheme, supportedNetworks: ["eip155:56"] },
+      { facilitator: stubFacilitator() },
+    );
+    expect(
+      await adapter.generateChallenge(
+        buildContext({
+          networks: ["eip155:56"],
+          payTo: { "eip155:56": RECIPIENT },
+          resolvedPrices: [{ asset: BUILT_IN_USDC, amount: "$0.01" }],
+        }),
+      ),
+    ).toEqual({});
+  });
   it("emits a base64 PAYMENT-REQUIRED header when prices resolve", async () => {
     const adapter = createX402Adapter(CONFIG, { facilitator: stubFacilitator() });
     const headers = await adapter.generateChallenge(buildContext());
