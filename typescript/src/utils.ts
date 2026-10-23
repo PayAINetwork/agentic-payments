@@ -20,6 +20,7 @@ export interface ResolvedAssetNetworkInfo {
   decimals: number;
   eip712Name: string;
   eip712Version: string;
+  assetTransferMethod?: "eip3009" | "permit2";
 }
 
 const DEFAULT_EIP712_VERSION = "2";
@@ -39,6 +40,7 @@ export function getAssetNetworkInfo(
     decimals: entry.decimals,
     eip712Name: entry.eip712Name ?? asset.name,
     eip712Version: entry.eip712Version ?? DEFAULT_EIP712_VERSION,
+    ...(entry.assetTransferMethod ? { assetTransferMethod: entry.assetTransferMethod } : {}),
   };
 }
 

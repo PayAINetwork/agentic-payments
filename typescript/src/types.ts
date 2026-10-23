@@ -42,6 +42,8 @@ export interface AssetNetworkInfo {
   eip712Name?: string;
   /** EIP-712 domain version. Defaults to `"2"`. */
   eip712Version?: string;
+  /** x402 transfer method. Permit2 tokens require an initial on-chain approval. */
+  assetTransferMethod?: "eip3009" | "permit2";
 }
 
 /**

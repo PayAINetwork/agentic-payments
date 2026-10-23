@@ -107,6 +107,9 @@ export function createX402Adapter(
     for (const { asset, amount } of ctx.resolvedPrices) {
       for (const network of ctx.networks) {
         if (!supported.has(network)) continue;
+        const isBsc = network === "eip155:56" || network === "eip155:97";
+        // BSC admission currently supports exact Permit2 only, including custom tokens.
+        if (isBsc && config.scheme !== "exact") continue;
         const info = getAssetNetworkInfo(asset, network);
         const payToAddress = ctx.payTo[network];
         if (!info || !payToAddress) continue;
@@ -122,8 +125,11 @@ export function createX402Adapter(
         // simple spread order is correct.
         const facilitatorExtra = extraMap.get(`${config.scheme}:${network}`) ?? {};
         const isEvm = network.startsWith("eip155:");
+        const transferMethod = isBsc ? "permit2" : info.assetTransferMethod;
         const extra: Record<string, unknown> = isEvm
-          ? { ...facilitatorExtra, name: info.eip712Name, version: info.eip712Version }
+          ? transferMethod === "permit2"
+            ? { ...facilitatorExtra, assetTransferMethod: "permit2" }
+            : { ...facilitatorExtra, name: info.eip712Name, version: info.eip712Version }
           : { ...facilitatorExtra };
 
         accepts.push({

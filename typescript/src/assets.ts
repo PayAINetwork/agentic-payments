@@ -6,7 +6,7 @@ import type { AssetRegistry, CustomAssetDef } from "./types.js";
  */
 
 /**
- * USDC covers every PayAI-supported x402 network, including chains where the
+ * USDC covers the preconfigured x402 networks below, including chains where the
  * deployed stablecoin is a bridged variant. Users configure `assets: ["USDC"]`
  * and the SDK transparently uses whichever deployment is canonical per chain.
  */
@@ -14,6 +14,11 @@ export const USDC: CustomAssetDef = {
   name: "USDC",
   addresses: {
     // --- EVM mainnets ---
+    "eip155:56": {
+      address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      decimals: 18,
+      assetTransferMethod: "permit2", // Binance-Peg USDC, not Circle-native USDC
+    },
     "eip155:8453": {
       address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       decimals: 6,
@@ -85,6 +90,11 @@ export const USDC: CustomAssetDef = {
 export const USDT: CustomAssetDef = {
   name: "USDT",
   addresses: {
+    "eip155:56": {
+      address: "0x55d398326f99059fF775485246999027B3197955",
+      decimals: 18,
+      assetTransferMethod: "permit2", // Binance-Peg USDT
+    },
     "eip155:8453": {
       address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
       decimals: 6, // Base mainnet USDT
@@ -133,10 +143,11 @@ export const BUILT_IN_ASSETS: AssetRegistry = {
 
 /**
  * EVM networks PayAI's x402 facilitator can settle payments on.
- * Sourced from the facilitator's /kinds endpoint, v2 entries only.
+ * Check the facilitator's /supported endpoint for live v2 payment kinds.
  */
 export const X402_EVM_NETWORKS = {
   mainnet: [
+    "eip155:56", // BNB Smart Chain (exact Permit2 only)
     "eip155:8453", // Base
     "eip155:43114", // Avalanche C-Chain
     "eip155:1329", // Sei
