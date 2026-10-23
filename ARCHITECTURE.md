@@ -76,9 +76,9 @@ interface ProtocolAdapter {
 
 **x402 adapter** (`protocols/x402.ts`) wraps `@x402/core/http`. Settlement is **deferred** — `verifyAndSettle` only verifies the payment signature with the facilitator; the returned `settleAndReceipt` function calls `facilitator.settle` later, after the handler runs successfully. This lets the server avoid settling payments for responses that ultimately error.
 
-The adapter filters `ctx.networks` against `config.supportedNetworks` before emitting any `accepts` entries. This prevents us from advertising payment options on chains the configured facilitator can't actually settle.
+The adapter filters `ctx.networks` against `config.supportedNetworks` before emitting any `accepts` entries. This constrains advertised networks to the configured allowlist; operators must keep that list aligned with their facilitator's live `/supported` response.
 
-Per-request `accepts` entries include `extra: { name, version }` carrying the EIP-712 domain metadata the client needs to sign payment authorizations — sourced from the per-network `AssetNetworkInfo` in the asset registry.
+EIP-3009 `accepts` entries include `extra: { name, version }` sourced from the per-network asset metadata. Permit2 entries use `extra: { assetTransferMethod: "permit2" }` instead. BNB Smart Chain (BSC, chains 56 and 97) is restricted to exact Permit2 payments; up-to and batch entries are omitted.
 
 **MPP adapter** (`protocols/mpp.ts`) wraps `mppx/server`. Tempo payments settle on-chain **before** the client sends the credential, so `verifyAndSettle` performs the full verification path (HMAC check, expiry, on-chain transaction check via mppx's `compose()(req)`) and the returned `settleAndReceipt` simply attaches the `Payment-Receipt` header — no additional network call needed.
 
@@ -132,8 +132,9 @@ A `CustomAssetDef` has one `name` (the developer-facing symbol, e.g. `"USDC"`) a
 - `decimals` — required, single source of truth (no top-level fallback)
 - `eip712Name` — optional, defaults to the asset's `name`
 - `eip712Version` — optional, defaults to `"2"`
+- `assetTransferMethod` — optional, `"eip3009"` or `"permit2"` for EVM payment construction
 
-This shape lets a single built-in `USDC` entry cover every PayAI-supported chain, including deployments that diverge in EIP-712 domain name (`"USD Coin"` on Base mainnet, `"Bridged USDC (SKALE Bridge)"` on Skale) or decimals (`pieUSD` on KiteAI testnet uses 18 decimals). Developers never look up a stablecoin address per-chain; they write `assets: ["USDC"]` and the SDK resolves the right deployment automatically.
+This shape lets a built-in `USDC` entry cover its configured networks, including different domain names or token decimals. Binance-Peg USDC and USDT on BSC use 18 decimals and Permit2. The registry is a curated subset of facilitator capabilities, not a guarantee of every live network or token. Developers can use built-in assets on listed networks or provide explicit custom asset metadata; BSC testnet requires its own token deployment and network configuration.
 
 ## PayTo shapes
 
